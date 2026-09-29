@@ -1,0 +1,2051 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>星眸蜂刃 — 空天无人打击模拟系统</title>
+<style>
+:root{
+  --bg-deep:#070b12; --bg-panel:#0d1524; --bg-card:#101b2e;
+  --line:#1d2f4a; --line-bright:#2c4a73;
+  --cyan:#00d4ff; --cyan-dim:rgba(0,212,255,.32);
+  --orange:#ff6a3d; --orange-dim:rgba(255,106,61,.35);
+  --red:#ff3b5c; --green:#3dffa0; --purple:#b26bff;
+  --text:#cfe3f5; --text-dim:#7d96b3;
+  --font:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  font-family:var(--font); color:var(--text); overflow:hidden;
+  background:
+    radial-gradient(ellipse at 25% 15%, rgba(0,80,130,.20), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(120,40,10,.14), transparent 50%),
+    var(--bg-deep);
+}
+.app{height:100vh;display:flex;flex-direction:column;}
+
+/* ============ 顶部 HUD ============ */
+.hud-header{
+  padding:10px 24px 8px; border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(0,212,255,.07), rgba(0,212,255,0) 90%);
+  display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap;
+}
+.hud-title{display:flex;align-items:center;gap:14px;}
+.title-icon{
+  width:46px;height:46px;border:1px solid var(--cyan); color:var(--cyan);
+  display:flex;align-items:center;justify-content:center;font-size:22px;
+  box-shadow:0 0 14px var(--cyan-dim), inset 0 0 12px rgba(0,212,255,.15);
+  background:linear-gradient(135deg, rgba(0,212,255,.15), transparent);
+  transform:rotate(45deg); border-radius:6px;
+}
+.title-icon span{transform:rotate(-45deg);}
+.hud-title h1{
+  font-size:24px;letter-spacing:4px;color:#eaf6ff;
+  text-shadow:0 0 12px rgba(0,212,255,.6);
+}
+.subtitle{font-size:12px;color:var(--text-dim);letter-spacing:1px;margin-top:2px;}
+.phase-track{display:flex;align-items:center;gap:0;}
+.phase-item{
+  display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);
+  background:rgba(13,21,36,.6); border-radius:4px; opacity:.45; transition:all .35s;
+}
+.phase-item .ph-num{font-size:12px;color:var(--text-dim);font-weight:bold;}
+.phase-item .ph-name{font-size:13px;white-space:nowrap;}
+.phase-item.done{border-color:var(--cyan);opacity:.8;}
+.phase-item.done .ph-num{color:var(--cyan);}
+.phase-item.active{
+  opacity:1;border-color:var(--cyan);color:#eaf6ff;
+  box-shadow:0 0 16px var(--cyan-dim), inset 0 0 10px rgba(0,212,255,.12);
+  background:linear-gradient(180deg, rgba(0,212,255,.16), rgba(0,212,255,.04));
+}
+.phase-item.active .ph-num{color:var(--cyan);}
+.phase-line{width:26px;height:2px;background:var(--line);margin:0 2px;}
+
+/* ============ 主区 ============ */
+.hud-main{flex:1;display:flex;gap:14px;padding:14px 18px;min-height:0;}
+
+.battlefield-wrap{flex:1;position:relative;min-width:0;display:flex;flex-direction:column;}
+.battlefield{
+  position:relative;flex:1;min-height:420px;border:1px solid var(--line-bright);
+  background:
+    linear-gradient(rgba(0,212,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,.05) 1px, transparent 1px),
+    radial-gradient(ellipse at 55% 55%, rgba(0,90,130,.16), transparent 72%);
+  background-size:42px 42px,42px 42px,100% 100%;
+  overflow:hidden; border-radius:6px;
+  box-shadow:inset 0 0 40px rgba(0,0,0,.55), 0 0 20px rgba(0,212,255,.06);
+}
+.battlefield::before{
+  content:"";position:absolute;inset:6px;pointer-events:none;
+  border:1px solid rgba(0,212,255,.12); border-radius:4px;
+}
+.battlefield.phase-switch{animation:bfSwitch .55s ease;}
+@keyframes bfSwitch{0%{opacity:.2;transform:scale(.985);}100%{opacity:1;transform:scale(1);}}
+.battlefield .corner{position:absolute;width:16px;height:16px;border-color:var(--cyan);opacity:.7;}
+.battlefield .corner.tl{top:12px;left:12px;border-top:2px solid;border-left:2px solid;}
+.battlefield .corner.tr{top:12px;right:12px;border-top:2px solid;border-right:2px solid;}
+.battlefield .corner.bl{bottom:12px;left:12px;border-bottom:2px solid;border-left:2px solid;}
+.battlefield .corner.br{bottom:12px;right:12px;border-bottom:2px solid;border-right:2px solid;}
+
+/* 地形装饰 */
+.terrain-mtn{
+  position:absolute;opacity:.55;pointer-events:none;
+  background:linear-gradient(160deg, rgba(40,55,75,.8), rgba(15,22,35,.92));
+  clip-path:polygon(0 100%, 12% 58%, 26% 74%, 42% 38%, 55% 66%, 70% 28%, 84% 60%, 100% 48%, 100% 100%);
+}
+.terrain-mtn.m2{background:linear-gradient(160deg, rgba(35,48,66,.75), rgba(12,18,30,.9));}
+
+/* 卫星 */
+.satellite{
+  position:absolute;z-index:30;display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:left 1.4s ease, top 1.4s ease; pointer-events:none;
+}
+.satellite .sat-body{
+  font-size:26px;filter:drop-shadow(0 0 8px rgba(0,212,255,.8));
+}
+.satellite .sat-tag{
+  font-size:13px;color:var(--cyan);letter-spacing:1px;white-space:nowrap;
+  background:rgba(0,212,255,.12);border:1px solid var(--cyan-dim);padding:2px 8px;border-radius:3px;
+}
+.sat-scanline{
+  position:absolute;left:0;right:0;height:64px;top:0;z-index:28;pointer-events:none;
+  background:linear-gradient(180deg, transparent, rgba(0,212,255,.32) 45%, rgba(120,240,255,.75) 50%, rgba(0,212,255,.32) 55%, transparent);
+  box-shadow:0 0 22px rgba(0,212,255,.4); opacity:0; transition:opacity .3s;
+}
+.sat-scanline.on{opacity:1;}
+
+/* 雷达波纹 */
+.radar-ripple{position:absolute;z-index:26;pointer-events:none;border-radius:50%;
+  border:2px solid var(--cyan); animation:ripple 1s ease-out forwards;}
+@keyframes ripple{0%{width:10px;height:10px;opacity:1;}100%{width:240px;height:240px;opacity:0;}}
+
+/* AI节点 */
+.ai-node{
+  position:absolute;z-index:24;display:flex;align-items:center;gap:8px;padding:10px 16px;
+  border:1px solid var(--purple); border-radius:6px; color:#e8dcff;
+  background:linear-gradient(135deg, rgba(178,107,255,.22), rgba(178,107,255,.05));
+  box-shadow:0 0 14px rgba(178,107,255,.35); font-size:15px; letter-spacing:1px;
+  animation:aiPulse 1.6s ease-in-out infinite;
+}
+.ai-node .ai-ico{font-size:20px;}
+@keyframes aiPulse{0%,100%{box-shadow:0 0 8px rgba(178,107,255,.3);}50%{box-shadow:0 0 22px rgba(178,107,255,.6);}}
+
+/* 基地 */
+.unit-base{
+  position:absolute;z-index:20;display:flex;flex-direction:column;align-items:center;gap:4px;
+  transform:translate(-50%,-50%);
+}
+.base-box{
+  width:44px;height:44px;border:1px solid var(--cyan); border-radius:4px;
+  background:linear-gradient(135deg, rgba(0,212,255,.28), rgba(0,212,255,.06));
+  box-shadow:0 0 16px var(--cyan-dim); position:relative;
+}
+.base-box::before{content:"基";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#eaf6ff;font-size:18px;}
+.base-tag{font-size:13px;color:var(--cyan);white-space:nowrap;letter-spacing:1px;}
+
+/* 目标 */
+.target{position:absolute;z-index:10;transform:translate(-50%,-50%);width:64px;height:64px;pointer-events:none;}
+.target.reveal{animation:targetReveal .9s ease-out both;}
+@keyframes targetReveal{0%{opacity:0;transform:translate(-50%,-50%) scale(.3);}100%{opacity:1;transform:translate(-50%,-50%) scale(1);}}
+.target .dot{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:30px;height:30px;border-radius:50%; display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;font-weight:bold;
+  box-shadow:0 0 12px currentColor; border:2px solid rgba(255,255,255,.75);
+}
+.target .ring{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:34px;height:34px;border-radius:50%;border:1px solid currentColor;
+  animation:ringPulse 1.6s ease-out infinite;
+}
+@keyframes ringPulse{0%{width:30px;height:30px;opacity:.9;}70%{width:64px;height:64px;opacity:0;}100%{opacity:0;}}
+.target .t-label{
+  position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);
+  font-size:13px;white-space:nowrap;color:var(--text);text-align:center;line-height:1.4;
+  background:rgba(7,11,18,.75);border:1px solid rgba(255,255,255,.14);border-radius:3px;padding:2px 6px;
+}
+.target .t-label .lv{font-weight:bold;}
+.target .t-label .err{color:#ffd166;font-size:12px;}
+.target .t-label .blind{color:#9aa7bd;font-size:12px;}
+.target .hpbar{
+  position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);
+  width:44px;height:4px;background:rgba(255,255,255,.14);border-radius:2px;overflow:hidden;
+}
+.target .hpbar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#3dffa0,#ffd166);transition:width .4s;}
+.target.destroyed .dot{background:#6b7280 !important;box-shadow:none;filter:grayscale(1);}
+.target.destroyed .ring{display:none;}
+.target.destroyed .hpbar{display:none;}
+.target.destroyed::after{content:"✕";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#ff5252;font-size:54px;font-weight:bold;text-shadow:0 0 16px rgba(255,60,60,.95),0 0 36px rgba(255,60,60,.55);z-index:3;line-height:1;animation:xPop .5s ease-out;}
+@keyframes xPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.3) rotate(-30deg);}60%{opacity:1;transform:translate(-50%,-50%) scale(1.28) rotate(6deg);}100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0);}}
+.target .t-blind-mask{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:44px;height:44px;border-radius:50%;border:1px dashed #5b6b82;background:rgba(40,48,64,.5);
+  display:flex;align-items:center;justify-content:center;color:#9aa7bd;font-size:12px;
+}
+
+/* 蜂群单元 */
+.drone{
+  position:absolute;z-index:15;transform:translate(-50%,-50%);pointer-events:none;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+.drone .d-body{
+  width:16px;height:16px;background:linear-gradient(135deg,#3de8ff,#0aa8d8);
+  transform:rotate(45deg); box-shadow:0 0 10px rgba(0,212,255,.85);
+  border:1px solid #bdf3ff; border-radius:2px; position:relative;
+}
+.drone .d-body::after{content:"";position:absolute;left:50%;top:50%;width:4px;height:4px;transform:translate(-50%,-50%) rotate(0);background:#fff;border-radius:50%;}
+.drone .d-tag{font-size:12px;color:#9fe9ff;white-space:nowrap;background:rgba(7,11,18,.7);padding:1px 6px;border-radius:3px;}
+/* 蜂群具象化：主体 + 若干小无人机粒子 */
+.drone .d-squad{position:relative;width:18px;height:18px;}
+.drone .d-mini{
+  position:absolute;left:50%;top:50%;width:5px;height:5px;
+  background:rgba(90,220,255,.9);border:1px solid rgba(190,245,255,.9);
+  border-radius:50%;z-index:1;pointer-events:none;
+  box-shadow:0 0 6px rgba(0,212,255,.8);
+  transform:translate(calc(-50% + var(--mx,0px)), calc(-50% + var(--my,0px)));
+  animation:miniFloat 1.5s ease-in-out infinite;
+}
+.drone .d-mini:nth-child(2){animation-delay:.2s;}
+.drone .d-mini:nth-child(3){animation-delay:.4s;}
+.drone .d-mini:nth-child(4){animation-delay:.6s;}
+.drone .d-mini:nth-child(5){animation-delay:.8s;}
+.drone .d-body{z-index:2;}
+@keyframes miniFloat{
+  0%,100%{transform:translate(calc(-50% + var(--mx,0px)), calc(-50% + var(--my,0px))) scale(1);opacity:.95;}
+  50%{transform:translate(calc(-50% + var(--mx,0px) + 3px), calc(-50% + var(--my,0px) - 3px)) scale(.65);opacity:.55;}
+}
+.drone.interfered{opacity:.32;filter:grayscale(.9);}
+.drone.interfered .d-body{background:#5b6b82;box-shadow:none;border-color:#3a4556;}
+.drone.interfered .d-tag{color:#7d96b3;text-decoration:line-through;}
+.drone.interfered .d-mini{background:#5b6b82;box-shadow:none;border-color:#3a4556;animation-play-state:paused;}
+.drone.striking .d-body{animation:strikeShake .3s linear 3;}
+@keyframes strikeShake{0%,100%{transform:rotate(45deg);}50%{transform:rotate(45deg) translate(3px,-3px);}}
+/* 打击瞬间：小无人机像蜂群分裂散开冲向目标 */
+.drone.striking .d-mini{animation:miniBurst .55s ease-out forwards;}
+@keyframes miniBurst{
+  0%{transform:translate(calc(-50% + var(--mx,0px)), calc(-50% + var(--my,0px))) scale(1);opacity:1;}
+  100%{transform:translate(calc(-50% + var(--mx,0px)*3.4), calc(-50% + var(--my,0px)*3.4)) scale(.25);opacity:0;}
+}
+.drone.back{opacity:.75;}
+
+/* ===== 无人机类型差异化 ===== */
+.drone.type-rc .d-body{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#4fd1ff,#1a6fd8);border-color:#cfeaff;box-shadow:0 0 14px rgba(79,209,255,.9);outline:2px solid rgba(255,255,255,.75);outline-offset:2px;}
+.drone.type-lm .d-body{background:linear-gradient(135deg,#4fd1ff,#1a6fd8);border-color:#cfeaff;box-shadow:0 0 12px rgba(79,209,255,.9);}
+.drone.type-mc .d-body{width:12px;height:12px;background:linear-gradient(135deg,#4fd1ff,#1a6fd8);border-color:#bfeaff;border-width:1px;box-shadow:none;opacity:.92;}
+.drone.type-dc .d-body{background:linear-gradient(135deg,#4fd1ff,#1a6fd8);border-color:#cfeaff;border-style:dashed;box-shadow:0 0 12px rgba(79,209,255,.75);}
+.drone.type-dc{opacity:.85;}
+.drone.type-rc .d-tag{color:#bfeaff;}
+.drone.type-lm .d-tag{color:#bfeaff;}
+.drone.type-mc .d-tag{color:#bfeaff;}
+.drone.type-dc .d-tag{color:#bfeaff;}
+.drone.crashed{opacity:.6;pointer-events:none;}
+.drone.crashed .d-body{background:linear-gradient(135deg,#ff9a55,#e04a1f);box-shadow:0 0 10px rgba(255,106,61,.8);border-color:#ffd6a1;transform:rotate(65deg) scale(.7);animation-play-state:paused;}
+.drone.crashed .d-mini{background:#e04a1f;box-shadow:0 0 4px rgba(255,106,61,.7);border-color:#ff9a55;animation-play-state:paused;}
+.drone.crashed .d-tag{color:#ffb07a;text-decoration:line-through;}
+.missile.crashed{opacity:.6;background:linear-gradient(135deg,#ff9a55,#e04a1f);box-shadow:0 0 10px rgba(255,106,61,.8);border-color:#ffd6a1;}
+.missile.crashed .m-tag{color:#ffb07a;text-decoration:line-through;}
+.ew-unit.crashed{opacity:.6;background:linear-gradient(135deg,#ff9a55,#e04a1f);box-shadow:0 0 10px rgba(255,106,61,.8);border-color:#ffd6a1;}
+.ew-unit.crashed .m-tag{color:#ffb07a;text-decoration:line-through;}
+.drone.returned .d-body{outline:2px solid #3dffa0;outline-offset:2px;}
+.drone.returned .d-tag{color:#3dffa0;}
+/* 导弹单元 */
+.missile{
+  position:absolute;z-index:16;transform:translate(-50%,-50%);pointer-events:none;
+  width:26px;height:8px;background:linear-gradient(90deg,#ffd166,#ff8a3d);border-radius:4px;
+  box-shadow:0 0 10px rgba(255,209,102,.9);
+}
+.missile::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);border-left:8px solid #ff6a3d;border-top:3px solid transparent;border-bottom:3px solid transparent;}
+.missile .m-tag{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:11px;color:#ffd166;background:rgba(7,11,18,.7);padding:0 5px;border-radius:3px;white-space:nowrap;}
+/* 电子干扰机单元 */
+.ew-unit{
+  position:absolute;z-index:16;transform:translate(-50%,-50%);pointer-events:none;
+  width:20px;height:20px;border:2px dashed #b26bff;border-radius:50%;
+  background:rgba(178,107,255,.12);box-shadow:0 0 14px rgba(178,107,255,.8);
+}
+.ew-unit .m-tag{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:11px;color:#cfa3ff;background:rgba(7,11,18,.7);padding:0 5px;border-radius:3px;white-space:nowrap;}
+.ew-unit::before,.ew-unit::after{content:"";position:absolute;left:50%;top:50%;border-radius:50%;border:1px solid rgba(178,107,255,.8);animation:ewPulse 1.4s ease-out infinite;}
+.ew-unit::before{width:26px;height:26px;transform:translate(-50%,-50%);}
+.ew-unit::after{width:40px;height:40px;transform:translate(-50%,-50%);animation-delay:.5s;}
+@keyframes ewPulse{0%{opacity:1;transform:translate(-50%,-50%) scale(.6);}100%{opacity:0;transform:translate(-50%,-50%) scale(1.6);}}
+/* 目标区域干扰波纹 */
+.ew-zone{
+  position:absolute;z-index:14;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:70px;height:70px;border-radius:50%;border:2px dashed rgba(178,107,255,.8);
+  box-shadow:0 0 24px rgba(178,107,255,.45), inset 0 0 24px rgba(178,107,255,.3);
+  pointer-events:none;animation:ewZone 1.8s ease-in-out infinite;
+}
+@keyframes ewZone{0%,100%{opacity:.9;transform:translate(-50%,-50%) scale(.9);}50%{opacity:.4;transform:translate(-50%,-50%) scale(1.1);}}
+/* 侧栏 select 样式 */
+.sc-kind select{
+  flex:1;background:#0a111e;color:#eaf6ff;border:1px solid var(--line-bright);
+  border-radius:3px;padding:3px 6px;font-size:12px;font-family:var(--font);
+}
+.sc-sub{margin-top:6px;color:var(--text-dim);}
+.drone.back .d-mini{opacity:.4;}
+
+/* 连线层 */
+.link-svg{position:absolute;inset:0;width:100%;height:100%;z-index:22;pointer-events:none;}
+
+/* 爆炸 */
+.explosion{position:absolute;z-index:35;transform:translate(-50%,-50%);pointer-events:none;}
+.explosion .core{
+  position:absolute;left:50%;top:50%;width:30px;height:30px;transform:translate(-50%,-50%);
+  background:radial-gradient(circle,#fff 0%, #ffd166 30%, #ff6a3d 65%, transparent 75%);
+  border-radius:50%; animation:expCore .8s ease-out forwards;
+}
+@keyframes expCore{0%{opacity:1;transform:translate(-50%,-50%) scale(.4);}100%{opacity:0;transform:translate(-50%,-50%) scale(2.6);}}
+.explosion .ring1{
+  position:absolute;left:50%;top:50%;width:16px;height:16px;transform:translate(-50%,-50%);
+  border:3px solid var(--orange);border-radius:50%; animation:expRing .9s ease-out forwards;
+}
+@keyframes expRing{0%{opacity:1;transform:translate(-50%,-50%) scale(1);}100%{opacity:0;transform:translate(-50%,-50%) scale(4);}}
+.explosion .spark{position:absolute;width:5px;height:5px;background:#ffd166;border-radius:50%;animation:sparkFly .55s ease-out forwards;}
+@keyframes sparkFly{0%{opacity:1;}100%{opacity:0;transform:translate(var(--sx),var(--sy)) scale(.3);}}
+
+/* 干扰波 */
+.jam-wave{position:absolute;z-index:34;transform:translate(-50%,-50%);pointer-events:none;
+  width:12px;height:12px;border:2px solid var(--purple);border-radius:50%;
+  animation:jamExp .8s ease-out forwards;}
+@keyframes jamExp{0%{opacity:1;transform:translate(-50%,-50%) scale(1);}100%{opacity:0;transform:translate(-50%,-50%) scale(5);}}
+
+/* ============ 侧栏 ============ */
+.hud-side{width:390px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;min-height:0;}
+.panel{
+  background:linear-gradient(180deg, rgba(16,27,46,.9), rgba(13,21,36,.85));
+  border:1px solid var(--line);border-radius:6px;padding:10px 12px;position:relative;overflow:hidden;
+}
+.panel::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg, transparent, var(--cyan), transparent);opacity:.6;}
+.panel-title{
+  font-size:14px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;display:flex;align-items:center;gap:6px;
+}
+.panel-title::before{content:"";width:8px;height:8px;background:var(--cyan);transform:rotate(45deg);box-shadow:0 0 6px var(--cyan);}
+.panel-body{font-size:14px;line-height:1.7;color:var(--text);overflow:auto;max-height:240px;}
+
+#panelPhase{flex-shrink:0;}
+#panelData{flex:1;min-height:0;display:flex;flex-direction:column;}
+#panelData .panel-body{flex:1;max-height:none;}
+
+/* 打击规模设置 */
+.strike-cfg{margin-bottom:10px;padding:8px 10px;border:1px solid rgba(0,212,255,.35);border-radius:6px;background:rgba(8,20,34,.6);}
+.strike-cfg .sc-title{font-size:12px;color:var(--cyan);letter-spacing:1px;margin-bottom:6px;}
+.strike-cfg .sc-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px;color:var(--text-dim);flex-wrap:wrap;}
+.strike-cfg input{width:56px;background:#0b1626;border:1px solid #2a3a55;color:#eaf6ff;border-radius:4px;padding:2px 4px;font-size:12px;}
+.strike-cfg .sc-reset{margin-left:auto;background:#16283c;border:1px solid #2a4a6a;color:#9fe9ff;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;}
+.strike-cfg .sc-reset:hover{background:#1e3a58;}
+.strike-cfg .sc-est{
+  margin-top:7px;padding-top:7px;border-top:1px dashed rgba(29,47,74,.6);
+  display:flex;align-items:baseline;justify-content:space-between;
+  font-size:12px;color:var(--text-dim);letter-spacing:1px;
+}
+.strike-cfg .sc-est b{font-size:19px;color:#ffd166;letter-spacing:1px;text-shadow:0 0 12px rgba(255,209,102,.4);}
+
+.phase-status{font-size:16px;color:#eaf6ff;letter-spacing:1px;margin-bottom:4px;}
+.phase-status em{color:var(--cyan);font-style:normal;font-weight:bold;}
+.phase-desc{font-size:14px;color:var(--text-dim);line-height:1.7;}
+
+table.tbl{width:100%;border-collapse:collapse;font-size:13px;}
+table.tbl th{
+  text-align:left;color:var(--cyan);font-weight:normal;letter-spacing:1px;
+  border-bottom:1px solid var(--line-bright);padding:5px 6px;white-space:nowrap;
+}
+table.tbl td{border-bottom:1px solid rgba(29,47,74,.5);padding:6px 6px;white-space:nowrap;}
+table.tbl tr:last-child td{border-bottom:none;}
+.tag{display:inline-block;padding:1px 7px;border-radius:2px;font-size:12px;border:1px solid;}
+.tag.high{color:#ff8fa3;border-color:#ff3b5c;background:rgba(255,59,92,.14);}
+.tag.mid{color:#ffc08a;border-color:#ff8a3d;background:rgba(255,138,61,.14);}
+.tag.low{color:#8fffc9;border-color:#3dffa0;background:rgba(61,255,160,.12);}
+.tag.blind{color:#9aa7bd;border-color:#5b6b82;background:rgba(90,105,130,.15);}
+.tag.destroy{color:#ff8f8f;border-color:#ff5252;background:rgba(255,82,82,.15);}
+.tag.alive{color:#ffd166;border-color:#ffd166;background:rgba(255,209,102,.12);}
+.tag.ok{color:#8fffc9;border-color:#3dffa0;background:rgba(61,255,160,.12);}
+/* 定位精度分级：误差小=精度高(绿) / 中(黄) / 低(红) */
+.tag.acc-high{color:#8fffc9;border-color:#3dffa0;background:rgba(61,255,160,.12);}
+.tag.acc-mid{color:#ffd166;border-color:#ffd166;background:rgba(255,209,102,.12);}
+.tag.acc-low{color:#ff8fa3;border-color:#ff3b5c;background:rgba(255,59,92,.14);}
+
+.pseudo{
+  background:#0a111e;border:1px solid var(--line);border-radius:4px;
+  padding:10px 12px;font-family:Consolas,"Courier New",monospace;font-size:13px;line-height:1.8;
+  color:#a8e6ff;white-space:pre;overflow:auto;max-height:240px;
+}
+.pseudo .cm{color:#5f7a95;} .pseudo .kw{color:#b26bff;} .pseudo .fn{color:#3dffa0;} .pseudo .num{color:#ffd166;}
+
+.log-line{font-size:12px;color:var(--text-dim);padding:2px 0;border-bottom:1px dashed rgba(29,47,74,.4);}
+.log-line b{color:var(--cyan);font-weight:normal;}
+.log-line.warn b{color:var(--orange);}
+.log-line.danger b{color:var(--red);}
+.log-line.ok b{color:var(--green);}
+
+/* 战报 */
+.report-card{
+  border:1px solid var(--line-bright);border-radius:5px;padding:10px;margin-top:4px;
+  background:rgba(7,11,18,.5);font-size:14px;
+}
+.report-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed rgba(29,47,74,.5);}
+.report-row:last-child{border-bottom:none;}
+.report-row .k{color:var(--text-dim);}
+.report-row .v{color:#eaf6ff;font-weight:bold;}
+.score-big{
+  text-align:center;font-size:54px;font-weight:bold;letter-spacing:4px;margin:8px 0 4px;
+  text-shadow:0 0 22px currentColor;animation:scoreIn .7s ease;
+}
+@keyframes scoreIn{0%{opacity:0;transform:scale(1.6);}100%{opacity:1;transform:scale(1);}}
+.score-grade-S{color:#ffd166;} .score-grade-A{color:#3dffa0;} .score-grade-B{color:#00d4ff;} .score-grade-C{color:#ff6a3d;}
+.score-tip{text-align:center;font-size:12px;color:var(--text-dim);}
+
+/* ============ 底部控制 ============ */
+.hud-footer{
+  display:flex;align-items:center;gap:14px;padding:10px 18px;
+  border-top:1px solid var(--line);background:rgba(10,16,26,.85);
+}
+#logBox{flex:1;min-height:54px;max-height:90px;overflow:auto;padding:6px 10px;
+  border:1px solid var(--line);border-radius:4px;background:rgba(5,8,14,.7);font-size:11px;color:var(--text-dim);line-height:1.7;}
+#mainBtn{
+  padding:13px 30px;font-size:15px;letter-spacing:3px;color:#eaf6ff;cursor:pointer;
+  border:1px solid var(--cyan);border-radius:4px;white-space:nowrap;
+  background:linear-gradient(180deg, rgba(0,212,255,.28), rgba(0,212,255,.08));
+  box-shadow:0 0 16px var(--cyan-dim); transition:all .25s; font-family:var(--font);
+}
+#mainBtn:hover:not(:disabled){background:linear-gradient(180deg, rgba(0,212,255,.42), rgba(0,212,255,.14));box-shadow:0 0 26px rgba(0,212,255,.5);}
+#mainBtn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;}
+#mainBtn.primary-orange{border-color:var(--orange);background:linear-gradient(180deg, rgba(255,106,61,.3), rgba(255,106,61,.08));box-shadow:0 0 16px var(--orange-dim);}
+#mainBtn.primary-orange:hover:not(:disabled){background:linear-gradient(180deg, rgba(255,106,61,.46), rgba(255,106,61,.16));box-shadow:0 0 26px rgba(255,106,61,.5);}
+#subBtn{
+  padding:11px 20px;font-size:13px;letter-spacing:2px;color:#ffb48a;cursor:pointer;
+  border:1px solid rgba(255,106,61,.55);border-radius:4px;white-space:nowrap;
+  background:rgba(255,106,61,.08); transition:all .25s; font-family:var(--font);
+}
+#subBtn:hover:not(:disabled){background:rgba(255,106,61,.2);box-shadow:0 0 14px rgba(255,106,61,.35);}
+#subBtn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* ============ 讲解浮层 ============ */
+.explain-float{
+  position:absolute;left:14px;top:14px;z-index:60;width:400px;
+  border:1px solid var(--cyan);border-radius:6px;background:rgba(7,13,24,.92);
+  box-shadow:0 0 24px rgba(0,212,255,.25);padding:14px 16px;
+  animation:efIn .45s ease; backdrop-filter:blur(2px);
+}
+@keyframes efIn{0%{opacity:0;transform:translateY(-12px);}100%{opacity:1;transform:translateY(0);}}
+.ef-title{font-size:15px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.ef-title::before{content:"◆";margin-right:6px;color:var(--orange);}
+.ef-tools{display:flex;align-items:center;gap:4px;}
+.ef-btn{
+  cursor:pointer;color:var(--cyan);border:1px solid var(--line-bright);background:rgba(0,212,255,.08);
+  width:22px;height:22px;font-size:13px;line-height:1;border-radius:3px;display:flex;align-items:center;justify-content:center;
+}
+.ef-btn:hover{color:#fff;border-color:var(--cyan);background:rgba(0,212,255,.28);}
+.ef-close{cursor:pointer;color:var(--text-dim);border:1px solid var(--line);background:transparent;width:22px;height:22px;font-size:12px;line-height:1;border-radius:3px;}
+.ef-close:hover{color:var(--orange);border-color:var(--orange);}
+.ef-body{font-size:16px;line-height:1.9;color:#d7e9fb;}
+.ef-body b{color:#ffd166;}
+.ef-nav{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;padding-top:10px;border-top:1px dashed rgba(120,170,220,.25);}
+.ef-nav .ef-btn{background:rgba(79,209,255,.12);border:1px solid rgba(79,209,255,.45);color:#9fe9ff;font-size:13px;padding:3px 12px;border-radius:5px;cursor:pointer;}
+.ef-nav .ef-btn:hover{background:rgba(79,209,255,.28);}
+.ef-page-info{font-size:13px;color:#9fe9ff;min-width:52px;text-align:center;}
+/* 最小化胶囊 */
+.ef-mini{
+  position:absolute;left:14px;top:14px;z-index:60;cursor:pointer;
+  padding:9px 16px;font-size:14px;letter-spacing:2px;color:var(--cyan);
+  border:1px solid var(--cyan);border-radius:6px;background:rgba(7,13,24,.92);
+  box-shadow:0 0 24px rgba(0,212,255,.25);animation:efIn .3s ease;
+}
+.ef-mini::before{content:"◆";margin-right:6px;color:var(--orange);}
+.ef-mini:hover{border-color:var(--orange);color:#eaf6ff;}
+
+/* ============ 右下角算法弹窗 ============ */
+.algo-fab{
+  position:fixed;right:22px;bottom:86px;z-index:80;cursor:pointer;
+  padding:10px 16px;font-size:13px;color:#e8dcff;letter-spacing:1px;font-family:var(--font);
+  border:1px solid var(--purple);border-radius:30px;
+  background:linear-gradient(180deg, rgba(178,107,255,.26), rgba(178,107,255,.08));
+  box-shadow:0 0 18px rgba(178,107,255,.4); transition:all .25s;
+}
+.algo-fab:hover{background:linear-gradient(180deg, rgba(178,107,255,.42), rgba(178,107,255,.16));box-shadow:0 0 30px rgba(178,107,255,.65);}
+.modal-mask{
+  position:fixed;inset:0;z-index:90;background:rgba(3,5,9,.75);display:none;align-items:center;justify-content:center;
+  backdrop-filter:blur(3px);
+}
+.modal-mask.show{display:flex;}
+.modal{
+  width:680px;max-width:92vw;max-height:86vh;overflow:auto;border:1px solid var(--purple);border-radius:8px;
+  background:linear-gradient(180deg, #111a2e, #0b1120); box-shadow:0 0 40px rgba(178,107,255,.35);
+  padding:22px 26px; animation:modalIn .35s ease;
+}
+@keyframes modalIn{0%{opacity:0;transform:scale(.94) translateY(14px);}100%{opacity:1;transform:scale(1) translateY(0);}}
+.modal h2{font-size:18px;color:#e8dcff;letter-spacing:2px;margin-bottom:4px;}
+.modal .m-sub{font-size:12px;color:var(--text-dim);margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:10px;}
+.modal h3{font-size:14px;color:var(--purple);margin:16px 0 8px;letter-spacing:1px;}
+.modal p,.modal li{font-size:13px;line-height:1.9;color:#cfe3f5;}
+.modal ul{padding-left:20px;}
+.modal .m-close{
+  margin-top:18px;padding:9px 26px;font-size:13px;letter-spacing:2px;cursor:pointer;color:#eaf6ff;
+  border:1px solid var(--cyan);border-radius:4px;background:rgba(0,212,255,.16);font-family:var(--font);
+}
+.modal .m-close:hover{background:rgba(0,212,255,.32);}
+.kbd{display:inline-block;padding:1px 8px;border:1px solid var(--line-bright);border-radius:3px;background:rgba(0,212,255,.08);color:#9fe9ff;font-family:Consolas,monospace;font-size:12px;}
+
+/* ============ 最终战果弹窗（三角洲撤离动画风格） ============ */
+.final-mask{
+  position:fixed;inset:0;z-index:120;
+  background:
+    radial-gradient(ellipse at 50% 55%, rgba(0,255,140,.12), transparent 62%),
+    rgba(2,4,8,.84);
+  display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);
+}
+.final-mask.show{display:flex;}
+.final-modal{
+  width:620px;max-width:94vw;max-height:88vh;overflow:auto;text-align:center;
+  padding:32px 36px 28px;border-radius:10px;position:relative;
+  border:1px solid rgba(61,255,160,.55);
+  background:linear-gradient(180deg,#0c1816,#07100e 55%,#0a0f1a);
+  box-shadow:0 0 60px rgba(61,255,160,.28), inset 0 0 40px rgba(61,255,160,.05);
+  animation:finalIn .5s ease;
+}
+@keyframes finalIn{0%{opacity:0;transform:scale(.82) translateY(30px);}100%{opacity:1;transform:scale(1) translateY(0);}}
+.final-modal::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background:repeating-linear-gradient(180deg, transparent 0 6px, rgba(61,255,160,.045) 6px 7px);
+}
+.final-title{
+  font-size:58px;font-weight:bold;letter-spacing:10px;color:#3dffa0;position:relative;
+  text-shadow:0 0 24px rgba(61,255,160,.8), 0 0 60px rgba(61,255,160,.4);
+  animation:ftIn .7s ease both;
+}
+@keyframes ftIn{
+  0%{opacity:0;transform:scale(1.7);letter-spacing:34px;}
+  60%{opacity:1;transform:scale(.96);letter-spacing:10px;}
+  100%{opacity:1;transform:scale(1);letter-spacing:10px;}
+}
+.final-sub{font-size:12px;color:#7fb8a4;letter-spacing:6px;margin:6px 0 22px;position:relative;}
+.final-line{
+  display:flex;align-items:baseline;justify-content:space-between;padding:14px 20px;margin:0 auto 12px;
+  border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);
+  animation:flIn .6s ease both;position:relative;
+}
+.final-line .fl-k{font-size:15px;letter-spacing:3px;}
+.final-line .fl-v{font-weight:bold;letter-spacing:2px;}
+.final-line.yellow{border-color:rgba(255,209,102,.35);}
+.final-line.yellow .fl-k{color:#c9a94a;}
+.final-line.yellow .fl-v{color:#ffd166;font-size:42px;text-shadow:0 0 18px rgba(255,209,102,.5);}
+.final-line.red{border-color:rgba(255,82,82,.35);animation-delay:.15s;}
+.final-line.red .fl-k{color:#c95a63;}
+.final-line.red .fl-v{color:#ff5252;font-size:34px;text-shadow:0 0 16px rgba(255,82,82,.45);}
+@keyframes flIn{0%{opacity:0;transform:translateX(-24px);}100%{opacity:1;transform:translateX(0);}}
+.final-fleet-title{font-size:14px;color:var(--cyan);letter-spacing:3px;margin:18px 0 10px;text-align:left;position:relative;}
+.fleet-group{margin-bottom:14px;text-align:left;position:relative;}
+.fg-label{font-size:13px;letter-spacing:1px;margin-bottom:7px;font-weight:bold;}
+.fleet-grid{display:flex;flex-wrap:wrap;gap:8px;}
+.fleet-item{
+  display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);font-size:12px;
+}
+.fi-ico{
+  width:14px;height:14px;flex-shrink:0;position:relative;
+  background:linear-gradient(135deg,#fff,var(--fc));transform:rotate(45deg);
+  border-radius:2px;box-shadow:0 0 8px var(--fc);
+}
+.fi-ico::after{content:"";position:absolute;left:50%;top:50%;width:3px;height:3px;background:#fff;border-radius:50%;transform:translate(-50%,-50%);}
+.fi-name{color:#cfe3f5;font-family:Consolas,monospace;}
+.fi-type{display:inline-block;margin-left:4px;padding:0 4px;font-size:9px;font-style:normal;color:#8fd7ff;border:1px solid rgba(143,215,255,.4);border-radius:3px;vertical-align:1px;}
+.fi-st{color:#ff6a6a;font-size:11px;}
+.fi-st.ret{color:#3dd6a0;}
+.fleet-item.lost{opacity:.55;}
+.fleet-item.lost .fi-ico{background:#5b6b82;box-shadow:none;}
+.fleet-item.lost .fi-name{color:#7d96b3;text-decoration:line-through;}
+.final-close{
+  margin-top:22px;padding:10px 42px;font-size:14px;letter-spacing:4px;cursor:pointer;color:#0a1612;
+  border:1px solid rgba(61,255,160,.7);border-radius:4px;font-weight:bold;
+  background:linear-gradient(180deg, rgba(61,255,160,.5), rgba(61,255,160,.22));
+  font-family:var(--font);transition:all .25s;
+}
+.final-close:hover{background:linear-gradient(180deg, rgba(61,255,160,.7), rgba(61,255,160,.35));box-shadow:0 0 24px rgba(61,255,160,.4);}
+
+/* ============ 提示条 ============ */
+.toast{
+  position:fixed;left:50%;top:130px;transform:translateX(-50%);z-index:95;
+  padding:12px 28px;font-size:14px;letter-spacing:1px;border-radius:4px;
+  background:rgba(7,13,24,.94);border:1px solid var(--orange);color:#ffd9c8;
+  box-shadow:0 0 26px rgba(255,106,61,.45);animation:toastIn .4s ease;pointer-events:none;
+}
+@keyframes toastIn{0%{opacity:0;transform:translate(-50%,-16px);}100%{opacity:1;transform:translate(-50%,0);}}
+
+@media (max-width:1100px){
+  .hud-main{flex-direction:column;overflow:auto;}
+  .hud-side{width:100%;}
+  .battlefield{min-height:360px;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- 顶部 -->
+  <header class="hud-header">
+    <div class="hud-title">
+      <div class="title-icon"><span>✦</span></div>
+      <div>
+        <h1>星眸蜂刃</h1>
+        <p class="subtitle">空天无人打击模拟系统 · 军事高新技术汇报演示</p>
+      </div>
+    </div>
+    <div class="phase-track" id="phaseTrack">
+      <div class="phase-item active" data-p="1"><span class="ph-num">01</span><span class="ph-name">卫星侦察</span></div>
+      <div class="phase-line"></div>
+      <div class="phase-item" data-p="2"><span class="ph-num">02</span><span class="ph-name">AI任务分配</span></div>
+      <div class="phase-line"></div>
+      <div class="phase-item" data-p="3"><span class="ph-num">03</span><span class="ph-name">蜂群突防与打击</span></div>
+      <div class="phase-line"></div>
+      <div class="phase-item" data-p="4"><span class="ph-num">04</span><span class="ph-name">打击效果评估</span></div>
+    </div>
+  </header>
+
+  <!-- 主区 -->
+  <main class="hud-main">
+    <div class="battlefield-wrap">
+      <div class="battlefield" id="battlefield">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <!-- 地形盲区（装饰+遮挡判定） -->
+        <div class="terrain-mtn" id="mtn1" style="left:8%;top:52%;width:38%;height:34%;"></div>
+        <div class="terrain-mtn m2" id="mtn2" style="left:58%;top:10%;width:34%;height:30%;"></div>
+        <!-- 基地 -->
+        <div class="unit-base" id="unitBase" style="left:8%;top:64%;">
+          <div class="base-box"></div>
+          <div class="base-tag">无人机基地</div>
+        </div>
+        <!-- AI节点 -->
+        <div class="ai-node" id="aiNode" style="left:50%;top:22%;display:none;">
+          <span class="ai-ico">◈</span><span>AI决策中心</span>
+        </div>
+        <!-- 卫星 -->
+        <div class="satellite" id="satellite" style="left:12%;top:5%;">
+          <div class="sat-body">🛰</div>
+          <div class="sat-tag">星眸侦察卫星</div>
+        </div>
+        <div class="sat-scanline" id="scanline"></div>
+        <!-- 动态层 -->
+        <div id="targetsLayer"></div>
+        <div id="dronesLayer"></div>
+        <div id="fxLayer"></div>
+        <svg class="link-svg" id="linkSvg"></svg>
+        <!-- 讲解浮层 -->
+        <div class="explain-float" id="explainFloat" style="display:none;">
+          <div class="ef-title">
+            <span>讲解要点</span>
+            <span class="ef-tools">
+              <button class="ef-btn" onclick="efZoom(-1)" title="缩小">－</button>
+              <button class="ef-btn" onclick="efZoom(1)" title="放大">＋</button>
+              <button class="ef-btn" onclick="efMinimize()" title="最小化">—</button>
+              <button class="ef-close" onclick="closeExplain()" title="关闭">✕</button>
+            </span>
+          </div>
+          <div class="ef-body" id="efBody"></div>
+          <div class="ef-nav" id="efNav" style="display:none;">
+            <button class="ef-btn" onclick="efPage(-1)" title="上一页">◀</button>
+            <span id="efPageInfo" class="ef-page-info"></span>
+            <button class="ef-btn" onclick="efPage(1)" title="下一页">▶</button>
+          </div>
+        </div>
+        <!-- 讲解浮层最小化胶囊 -->
+        <div class="ef-mini" id="efMini" style="display:none;" onclick="efRestore()" title="点击展开讲解">讲解要点</div>
+      </div>
+    </div>
+
+    <!-- 侧栏 -->
+    <aside class="hud-side">
+      <div class="panel" id="panelPhase">
+        <div class="panel-title">当前阶段</div>
+        <div class="phase-status" id="phaseStatus">等待指令 —— 系统待命</div>
+        <div class="phase-desc" id="phaseDesc">点击底部按钮，启动「星眸蜂刃」空天无人打击杀伤链演示。</div>
+      </div>
+      <div class="panel" id="panelData">
+        <div class="panel-title" id="dataPanelTitle">任务数据</div>
+        <div class="strike-cfg" id="strikeCfg">
+          <div class="sc-title">打击规模设置（架/目标）</div>
+          <div class="sc-row">
+            <span>高威胁</span><input id="cfgHigh" type="number" min="1" max="15" value="6">
+            <span>中威胁</span><input id="cfgMid" type="number" min="1" max="15" value="4">
+            <span>低威胁</span><input id="cfgLow" type="number" min="1" max="15" value="2">
+          </div>
+          <div class="sc-row">
+            <span>二次补击×</span><input id="cfgRetry2" type="number" min="1" max="4" step="0.5" value="1.5">
+            <span>三次补击×</span><input id="cfgRetry3" type="number" min="1" max="4" step="0.5" value="2">
+            <button id="cfgReset" class="sc-reset" type="button">恢复默认</button>
+          </div>
+          <div class="sc-title sc-sub">打击资产配置</div>
+          <div class="sc-row sc-kind">
+            <span>蜂群类型</span>
+            <select id="cfgUAVType">
+              <option value="lm" selected>巡飞弹（7万美元/架）</option>
+              <option value="rc">察打一体（800万美元/架）</option>
+              <option value="mc">简易改装（0.3万美元/架）</option>
+              <option value="dc">诱饵掩护编队（诱饵40%+巡飞弹60%）</option>
+              <option value="mix">集群混编（察打清除15%+巡飞主攻40%+改装补充20%+诱饵开路25%）</option>
+            </select>
+          </div>
+          <div class="sc-row sc-kind">
+            <span>打击手段</span>
+            <select id="cfgStrikeKind">
+              <option value="uav" selected>蜂群打击</option>
+              <option value="missile">导弹打击（150万美元/枚）</option>
+              <option value="ew">电子干扰压制（40万美元/架，先压制后蜂群）</option>
+            </select>
+          </div>
+          <div class="sc-est">
+            <span>预计使用价值 <span style="opacity:.7" id="estCostHint">（巡飞弹 × 架）</span></span>
+            <b id="estCost">待侦察</b>
+          </div>
+        </div>
+        <div class="panel-body" id="dataBody">
+          <div style="color:var(--text-dim);font-size:12px;">系统就绪，等待卫星侦察指令。</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 底部控制 -->
+  <footer class="hud-footer">
+    <div id="logBox">[系统] 星眸蜂刃模拟系统已启动，等待指令。<br/></div>
+    <button id="subBtn" style="display:none;"></button>
+    <button id="mainBtn">开始卫星侦察</button>
+  </footer>
+
+  <!-- 右下角算法讲解 -->
+  <button class="algo-fab" onclick="openAlgo()">AI调度算法讲解</button>
+  <div class="modal-mask" id="algoModal" onclick="if(event.target===this)closeAlgo()">
+    <div class="modal">
+      <h2>AI 调度算法讲解</h2>
+      <div class="m-sub">星眸蜂刃 · 任务分配模块 —— 贪心 + 优先级排序</div>
+      <h3>一、问题定义</h3>
+      <p>给定已侦察目标集合 <span class="kbd">T</span>（每个目标带威胁等级与距基地距离），以及有限弹药池（蜂群单元数量 <span class="kbd">B</span>）。要求在弹药约束下，为每个目标分配蜂群单元，使高价值目标优先获得打击资源。</p>
+      <h3>二、调度策略（两层排序 + 贪心分配）</h3>
+      <ul>
+        <li><b>第一优先级：威胁等级降序</b> —— 高威胁（导弹发射车/指挥所/雷达站）> 中威胁（装甲集群/防空阵地）> 低威胁（补给车队/通信基站），确保"打要害"。</li>
+        <li><b>第二优先级：距离升序</b> —— 同等级目标按距基地由近及远，减少突防暴露时间，提高任务成功率。</li>
+        <li><b>贪心弹药分配</b> —— 按排序依次为目标分配需求弹药（高 3 架 / 中 2 架 / 低 1 架）；弹药不足时优先保障排在前面的目标，并在后续目标标记"弹药不足"。</li>
+      </ul>
+      <h3>三、伪代码</h3>
+      <div class="pseudo">function 任务分配(T, B):            <span class="cm"># T: 目标集合, B: 弹药池</span>
+    # ① 威胁等级降序（高&gt;中&gt;低）
+    T ← sort(T, key=威胁等级, desc)
+    # ② 同等级按距离升序（近优先）
+    T ← sort(T, key=距离, asc)
+    A ← 空表                          <span class="cm"># 分配表</span>
+    for 目标 in T:                    <span class="cm"># ③ 贪心分配</span>
+        need ← 需求弹药(目标.威胁)     <span class="cm"># 高3/中2/低1</span>
+        if B ≥ need:
+            A[目标] ← need; B ← B − need
+        else if B &gt; 0:
+            A[目标] ← B; B ← 0; 标记"弹药不足"
+        else:
+            A[目标] ← 0; 标记"弹药不足"
+    return A                          <span class="cm"># 输出分配表</span></div>
+      <h3>四、复杂度与讨论</h3>
+      <ul>
+        <li>时间复杂度：排序 <span class="kbd">O(n log n)</span> + 贪心遍历 <span class="kbd">O(n)</span>，适合战场实时调度。</li>
+        <li>贪心策略得到的是<b>局部最优</b>：保证排序靠前的高价值目标优先，但极端情况下可能使低价值目标无弹药可用。实战中可通过迭代加深、市场竞拍等算法进一步全局优化。</li>
+        <li>现场演示要点：观察"高威胁近距"目标如何优先获得蜂群，以及弹药耗尽时低威胁目标的"弹药不足"标记。</li>
+      </ul>
+      <button class="m-close" onclick="closeAlgo()">关闭</button>
+    </div>
+  </div>
+
+  <!-- 最终战果弹窗（三角洲撤离动画风格） -->
+  <div class="final-mask" id="finalMask" onclick="if(event.target===this)closeFinal()">
+    <div class="final-modal">
+      <div class="final-title">打击成功</div>
+      <div class="final-sub">STRIKE COMPLETE · 空天无人打击任务完成</div>
+      <div class="final-line yellow">
+        <span class="fl-k">破坏价值</span>
+        <span class="fl-v" id="finDamage">—</span>
+      </div>
+      <div class="final-line red">
+        <span class="fl-k">使用价值</span>
+        <span class="fl-v" id="finCost">—</span>
+      </div>
+      <div class="final-fleet-title">◆ 本次出动蜂群</div>
+      <div id="finFleet"></div>
+      <button class="final-close" onclick="closeFinal()">确认</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const rand = (a,b) => a + Math.random()*(b-a);
+const randInt = (a,b) => Math.floor(rand(a,b+1));
+const pick = arr => arr[randInt(0, arr.length-1)];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+/* ================= 全局状态 ================= */
+let G = {
+  phase: 0, step: 'start',
+  targets: [], drones: [], reserve: 0,
+  assignedTotal: 0, interferedCount: 0,
+  scanPass: 1,
+  fleet: [],
+  uavType: 'lm', strikeKind: 'uav'
+};
+
+const TARGET_TYPES = [
+  // vMin/vMax：公开资料估算价值（万美元）——导弹发射车(战略级车载系统)、指挥所(含电子设备)、雷达站(防空/预警雷达)、
+  // 装甲集群(坦克编队，参考M1A1约1066万/辆、T-90约290-500万/辆)、防空阵地(参考爱国者体系)、补给车队(参考防雷车约470万/辆)、通信基站
+  { name:'导弹发射车', threat:'高', color:'#ff3b5c', hp:150, need:3, def:0.25, vMin:4000, vMax:9000 },
+  { name:'指挥所',     threat:'高', color:'#ff3b5c', hp:150, need:3, def:0.24, vMin:2500, vMax:5500 },
+  { name:'雷达站',     threat:'高', color:'#ff5b8a', hp:130, need:3, def:0.22, vMin:5000, vMax:12000 },
+  { name:'装甲集群',   threat:'中', color:'#ff8a3d', hp:120, need:2, def:0.15, vMin:3500, vMax:6500 },
+  { name:'防空阵地',   threat:'中', color:'#ff9a55', hp:120, need:2, def:0.18, vMin:8000, vMax:15000 },
+  { name:'补给车队',   threat:'低', color:'#3dd6a0', hp:100, need:1, def:0.05, vMin:1500, vMax:4000 },
+  { name:'通信基站',   threat:'低', color:'#3dc8a8', hp:100, need:1, def:0.05, vMin:800, vMax:2500 }
+];
+// 无人机类型资产（万美元/架）——基于公开报道估算，演示用随机浮动基准：
+// 察打一体：长航时察打一体无人机平台（翼龙/死神级）约 800~1200 万美元，可回收复用
+// 巡飞弹：西琴蜂群巡飞弹约 7 万美元、HX-2 约 5.8 万欧元，空中游荡自爆，可单机/组蜂群
+// 简易改装：民用机改装 FPV 约 0.2~0.7 万美元，近距离人工遥控携带炸药
+// 诱饵：雷达诱饵无人机约 1~2 万美元，不爆炸、欺骗防空雷达
+const UAV_TYPES = {
+  rc: { name:'察打一体', cost:800, color:'#4fd1ff', desc:'可回收 · 发射导弹 · 长航时定点清除', dmgMul:1.7, hitAdj:0.10, reusable:true,  minis:3, radius:22 },
+  lm: { name:'巡飞弹',   cost:7,   color:'#ff6a3d', desc:'空中游荡 · 自身爆炸 · 可单机/蜂群',   dmgMul:1.0, hitAdj:0.02, reusable:false, minis:5, radius:16 },
+  mc: { name:'简易改装', cost:0.3, color:'#c2ccd6', desc:'民用机改装 · 近距炸药 · 人工遥控',     dmgMul:0.65,hitAdj:-0.10,reusable:false, minis:0, radius:14 },
+  dc: { name:'诱饵',     cost:2,   color:'#d8a1ff', desc:'不爆炸 · 欺骗防空雷达',                 dmgMul:0,   hitAdj:0,    reusable:false, minis:0, radius:14 }
+};
+// 其他打击手段成本（万美元/枚·架）：远程巡航/战术导弹（参考战斧级约 100-200 万美元/枚）、电子干扰压制无人机
+const MISSILE_COST = 150;
+const EW_COST = 40;
+// 集群混编比例（参考实战"高低搭配"混合蜂群：诱饵开路骗防空 + 巡飞弹主攻铺量 + 察打一体侦察清除 + 简易改装近距补充）
+const MIX_RATIO = { rc:0.15, lm:0.40, mc:0.20, dc:0.25 };
+const MIX_COST = Object.keys(MIX_RATIO).reduce((s,k)=>s+MIX_RATIO[k]*UAV_TYPES[k].cost, 0);
+function uavTypeName(t){ return t==='mix' ? '集群混编' : (UAV_TYPES[t]||UAV_TYPES.lm).name; }
+function uavTypeDesc(t){ return t==='mix' ? '高低搭配 · 诱饵开路 + 巡飞主攻 + 察打清除 + 改装补充' : (UAV_TYPES[t]||UAV_TYPES.lm).desc; }
+function uavTypeCost(t){ return t==='mix' ? MIX_COST : (UAV_TYPES[t]||UAV_TYPES.lm).cost; }
+// 兼容旧引用：默认巡飞弹单价
+const DRONE_COST = UAV_TYPES.lm.cost;
+function fmtMoney(v){
+  if(v>=10000) return (v/10000).toFixed(2)+' 亿美元';
+  if(v>=100) return Math.round(v).toLocaleString()+' 万美元';
+  return (Math.round(v*10)/10).toLocaleString()+' 万美元';
+}
+// 单元资产成本（fleet 项：msl 导弹 / ew 干扰机 / rc·lm·mc·dc 无人机）
+function unitCost(type){
+  if(type==='msl') return MISSILE_COST;
+  if(type==='ew') return EW_COST;
+  return (UAV_TYPES[type]||UAV_TYPES.lm).cost;
+}
+// 实际损耗价值：回收单元不计，失联/消耗型单元计成本
+function fleetCost(arr){
+  return arr.reduce((s,f)=> s + (f.returned ? 0 : unitCost(f.type)), 0);
+}
+
+/* ================= 基础工具 ================= */
+function log(msg, cls){
+  const box = $('logBox');
+  box.innerHTML += `<div class="log-line ${cls||''}">[${new Date().toLocaleTimeString('zh-CN',{hour12:false})}] ${msg}</div>`;
+  box.scrollTop = box.scrollHeight;
+}
+function toast(msg){
+  const t = document.createElement('div');
+  t.className = 'toast'; t.innerHTML = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>{t.style.transition='opacity .5s';t.style.opacity='0';}, 2600);
+  setTimeout(()=>t.remove(), 3200);
+}
+function setPhaseUI(p){
+  G.phase = p;
+  document.querySelectorAll('.phase-item').forEach(el=>{
+    const n = +el.dataset.p;
+    el.classList.toggle('active', n===p);
+    el.classList.toggle('done', n<p);
+  });
+  const bf = $('battlefield');
+  bf.classList.remove('phase-switch'); void bf.offsetWidth; bf.classList.add('phase-switch');
+}
+function setBtn(text, orange){
+  const b = $('mainBtn');
+  b.textContent = text; b.disabled = false;
+  b.classList.toggle('primary-orange', !!orange);
+}
+function disableBtn(){ $('mainBtn').disabled = true; const sb=$('subBtn'); if(sb) sb.disabled = true; }
+let efSize = 2;
+let efAutoTimer = null;
+let efUserTouched = false;
+const EF_SIZES = [
+  { body: 13, w: 330 },
+  { body: 15, w: 380 },
+  { body: 17, w: 440 },
+  { body: 20, w: 520 }
+];
+function applyEfSize(){
+  const s = EF_SIZES[efSize] || EF_SIZES[2];
+  $('efBody').style.fontSize = s.body + 'px';
+  $('explainFloat').style.width = s.w + 'px';
+}
+function cancelEfAutoClose(){
+  efUserTouched = true;
+  clearTimeout(efAutoTimer);
+}
+function efZoom(d){
+  efSize = clamp(efSize + d, 0, EF_SIZES.length - 1);
+  applyEfSize();
+  cancelEfAutoClose();
+}
+function efMinimize(){
+  $('explainFloat').style.display = 'none';
+  $('efMini').style.display = 'block';
+  cancelEfAutoClose();
+}
+function efRestore(){
+  $('efMini').style.display = 'none';
+  $('explainFloat').style.display = 'block';
+  cancelEfAutoClose();
+}
+let efPages = [''], efPageIdx = 0;
+function showExplain(text){
+  efPages = String(text).split('|||');
+  efPageIdx = 0;
+  renderEfPage();
+  $('efMini').style.display = 'none';
+  $('explainFloat').style.display = 'block';
+  applyEfSize();
+  efUserTouched = false;
+  autoCloseExplain();
+}
+function renderEfPage(){
+  $('efBody').innerHTML = efPages[efPageIdx] || '';
+  const nav = $('efNav');
+  if(efPages.length > 1){
+    nav.style.display = 'flex';
+    $('efPageInfo').textContent = (efPageIdx+1) + ' / ' + efPages.length;
+  } else {
+    nav.style.display = 'none';
+  }
+}
+function efPage(d){
+  efPageIdx = Math.max(0, Math.min(efPages.length - 1, efPageIdx + d));
+  renderEfPage();
+  cancelEfAutoClose();
+}
+function closeExplain(){ $('explainFloat').style.display = 'none'; }
+function autoCloseExplain(){
+  // 去掉 7s 自动消失计时器：讲解浮层保留显示，由用户手动关闭
+}
+function setPanel(title, html){
+  $('dataPanelTitle').textContent = title;
+  $('dataBody').innerHTML = html;
+}
+function bfPos(el){ // 元素相对战场的像素中心
+  const r = el.getBoundingClientRect(), b = $('battlefield').getBoundingClientRect();
+  return { x: r.left - b.left + r.width/2, y: r.top - b.top + r.height/2 };
+}
+function bfSize(){ const b = $('battlefield').getBoundingClientRect(); return {w:b.width,h:b.height}; }
+
+/* ================= 目标生成 ================= */
+function genTargets(){
+  G.targets = [];
+  // 已知目标 >=3 个，未知（盲区/疑似）目标 1~3 个
+  const knownN = randInt(3,5), blindN = randInt(1,3);
+  const n = knownN + blindN;
+  const MIN_DIST = 12; // 目标最小间距（百分比），避免互相遮挡重叠
+  for(let i=1;i<=n;i++){
+    const t = Object.assign({}, pick(TARGET_TYPES));
+    let realX, realY, ok = false;
+    for(let tries=0; tries<80; tries++){
+      realX = rand(20, 90); realY = rand(12, 86);
+      ok = G.targets.every(o => Math.hypot(o.realX-realX, o.realY-realY) >= MIN_DIST);
+      if(ok) break;
+    }
+    // 兜底：重试耗尽仍未满足间距，则接受当前坐标
+    if(!ok){ realX = rand(20,90); realY = rand(12,86); }
+    // 盲区判定：落入两块山地的视觉区域则遮挡（约30%）
+    const inM1 = realX>8&&realX<46&&realY>52&&realY<86;
+    const inM2 = realX>58&&realX<92&&realY>10&&realY<40;
+    const blind = inM1 || inM2 || Math.random()<0.28;
+    // 定位误差：显示 ±15~80m，坐标偏移 ±1~6%
+    const err = randInt(15,80);
+    const offX = rand(-6,6), offY = rand(-6,6);
+    G.targets.push({
+      id:i,
+      type:t.name, threat:t.threat, color:t.color, need:t.need, def:t.def,
+      maxHp:t.hp, hp:t.hp, value:randInt(t.vMin, t.vMax),
+      realX, realY,
+      detX:clamp(realX+offX,4,96), detY:clamp(realY+offY,4,94),
+      errX:Math.abs(Math.round(offX*7)), errY:Math.abs(Math.round(offY*7)), errText:err,
+      blind, exposed:false, visible:false, revealed:false,
+      destroyed:false, hits:0, assigned:0, ammoShort:false,
+      el:null, hpEl:null
+    });
+  }
+  // 盲区/疑似目标数量精确控制到 1~3 个（保留山地视觉区自然判定，超限取消、不足补足）
+  let bIdx = G.targets.map((t,i)=>t.blind?i:-1).filter(i=>i>=0);
+  while(bIdx.length < blindN){
+    const idx = randInt(0, n-1);
+    if(!G.targets[idx].blind){ G.targets[idx].blind = true; bIdx.push(idx); }
+  }
+  while(bIdx.length > blindN){
+    const idx = bIdx.splice(randInt(0,bIdx.length-1),1)[0];
+    G.targets[idx].blind = false;
+  }
+}
+
+/* ================= 战场渲染 ================= */
+function clearLayers(){
+  $('targetsLayer').innerHTML='';
+  $('dronesLayer').innerHTML='';
+  $('fxLayer').innerHTML='';
+  $('linkSvg').innerHTML='';
+}
+function renderTargets(){
+  const layer = $('targetsLayer');
+  layer.innerHTML='';
+  G.targets.forEach(t=>{
+    if(!t.revealed) return; // 扫描线未扫到的目标不显示
+    const el = document.createElement('div');
+    el.className = 'target' + (t.destroyed?' destroyed':'') + ' reveal';
+    el.style.left = t.realX+'%'; el.style.top = t.realY+'%';
+    let inner = '';
+    if(t.blind && !t.visible){
+      inner = `<div class="t-blind-mask">盲</div>
+        <div class="t-label"><span class="lv" style="color:${t.color}">未知目标</span><br/><span class="blind">疑似目标·地形盲区</span></div>`;
+    } else {
+      inner = `<div class="dot" style="background:${t.color};color:#fff">${t.type.charAt(0)}</div>
+        <div class="ring" style="color:${t.color}"></div>
+        <div class="t-label">
+          <span class="lv" style="color:${t.color}">${t.type} · ${t.threat}威胁</span><br/>
+          <span class="blind">${t.blind&&t.exposed?'盲区暴露 · ':''}定位误差±${t.errText}m</span>
+        </div>
+        <div class="hpbar"><i id="hp-${t.id}"></i></div>`;
+    }
+    el.innerHTML = inner;
+    layer.appendChild(el);
+    t.el = el;
+  });
+  updateHpBars();
+}
+function updateHpBars(){
+  G.targets.forEach(t=>{
+    const h = $('hp-'+t.id);
+    if(!h) return;
+    if(t.destroyed || (t.blind && !t.visible)){ h.style.width = '0%'; return; }
+    h.style.width = clamp(t.hp/t.maxHp*100,0,100)+'%';
+  });
+}
+function distKm(t){
+  const b = $('unitBase'), s = bfSize();
+  const base = bfPos(b);
+  const tx = t.realX/100*s.w, ty = t.realY/100*s.h;
+  return Math.round(Math.hypot(tx-base.x, ty-base.y)/4);
+}
+
+/* ================= 卫星与扫描动画 ================= */
+async function moveSatellite(xPct, yPct){
+  const s = $('satellite');
+  s.style.left = xPct+'%'; s.style.top = yPct+'%';
+  await sleep(1400);
+}
+async function scanAnimation(pass, onProgress){
+  const bf = $('battlefield'), b = bf.getBoundingClientRect();
+  const line = $('scanline');
+  // 雷达波纹扫过
+  for(let i=0;i<5;i++){
+    const rp = document.createElement('div');
+    rp.className='radar-ripple';
+    rp.style.left = rand(15,85)+'%'; rp.style.top = rand(10,88)+'%';
+    $('fxLayer').appendChild(rp);
+    setTimeout(()=>rp.remove(), 1100);
+  }
+  // 扫描线
+  line.classList.add('on');
+  const t0 = performance.now(), dur = 1600;
+  await new Promise(res=>{
+    function f(t){
+      const p = Math.min((t-t0)/dur, 1);
+      line.style.top = (p*100)+'%';
+      if(onProgress) onProgress(p);
+      if(p<1) requestAnimationFrame(f); else res();
+    }
+    requestAnimationFrame(f);
+  });
+  line.classList.remove('on');
+  line.style.top='0%';
+  log(`星眸卫星第 ${pass} 次对地扫描完成`, 'ok');
+}
+
+/* ================= 蜂群生成与移动 ================= */
+function spawnDrones(units, startX, startY, cls){
+  const layer = $('dronesLayer');
+  const arr = [];
+  for(let i=0;i<units.length;i++){
+    const u = units[i];
+    const type = UAV_TYPES[u.type] || UAV_TYPES.lm;
+    const el = document.createElement('div');
+    el.className = 'drone type-'+(u.type||'lm') + (cls?' '+cls:'');
+    const jx = (i%6-2.5)*3.2, jy = (Math.floor(i/6)-1)*3.2;
+    el.style.left = (startX+jx)+'%'; el.style.top = (startY+jy)+'%';
+    let minis = '';
+    for(let m=0;m<type.minis;m++){
+      minis += `<span class="d-mini" style="--mx:${randInt(-22,22)}px;--my:${randInt(-22,22)}px"></span>`;
+    }
+    el.innerHTML = `<div class="d-squad">${minis}<div class="d-body"></div></div><div class="d-tag">${u.name}</div>`;
+    layer.appendChild(el);
+    u.el = el;
+    arr.push(u);
+  }
+  return arr;
+}
+// 生成打击编队：按全局蜂群类型（dc=诱饵掩护混编 40%诱饵+60%巡飞弹；mix=高低搭配集群混编）
+function buildUAVNames(total, target, idxRef){
+  const arr = [];
+  const type = G.uavType;
+  const P = {rc:'察打', lm:'巡飞', mc:'改装', dc:'诱饵'};
+  for(let k=0;k<total;k++){
+    let ut = type;
+    if(type==='dc'){ ut = k<Math.ceil(total*0.4)?'dc':'lm'; }
+    else if(type==='mix'){
+      ut = 'lm';
+      let r = Math.random(), acc = 0;
+      for(const key of Object.keys(MIX_RATIO)){ acc += MIX_RATIO[key]; if(r < acc){ ut = key; break; } }
+    }
+    arr.push({name: (P[ut]||'蜂群')+'-'+String(idxRef.i++).padStart(2,'0'), type:ut, target:target||null, interfered:false, done:false, returned:false});
+  }
+  return arr;
+}
+// 干扰机/导弹的通用单元生成
+function buildSpecialUnits(prefix, total, idxRef, type){
+  const arr = [];
+  for(let k=0;k<total;k++){
+    arr.push({name: prefix+'-'+String(idxRef.i++).padStart(2,'0'), type:type, target:null, interfered:false, done:false, returned:false});
+  }
+  return arr;
+}
+// 导弹单元渲染（弹体样式）
+function spawnMissiles(units, startX, startY){
+  const layer = $('dronesLayer');
+  const arr = [];
+  for(let i=0;i<units.length;i++){
+    const u = units[i];
+    const el = document.createElement('div');
+    el.className = 'missile';
+    const jx = (i%6-2.5)*3.2, jy = (Math.floor(i/6)-1)*3.2;
+    el.style.left = (startX+jx)+'%'; el.style.top = (startY+jy)+'%';
+    el.innerHTML = `<div class="m-tag">${u.name}</div>`;
+    layer.appendChild(el);
+    u.el = el;
+    arr.push(u);
+  }
+  return arr;
+}
+// 电子干扰机单元渲染（波纹脉冲样式）
+function spawnEWUnits(units, startX, startY){
+  const layer = $('dronesLayer');
+  const arr = [];
+  for(let i=0;i<units.length;i++){
+    const u = units[i];
+    const el = document.createElement('div');
+    el.className = 'ew-unit';
+    const jx = (i%6-2.5)*3.2, jy = (Math.floor(i/6)-1)*3.2;
+    el.style.left = (startX+jx)+'%'; el.style.top = (startY+jy)+'%';
+    el.innerHTML = `<div class="m-tag">${u.name}</div>`;
+    layer.appendChild(el);
+    u.el = el;
+    arr.push(u);
+  }
+  return arr;
+}
+async function animateMove(el, from, to, dur){
+  const t0 = performance.now();
+  return new Promise(res=>{
+    (function f(t){
+      const p = Math.min((t-t0)/dur,1);
+      el.style.left = (from.x+(to.x-from.x)*p)+'%';
+      el.style.top  = (from.y+(to.y-from.y)*p)+'%';
+      if(p<1) requestAnimationFrame(f); else res();
+    })(performance.now());
+  });
+}
+async function moveDroneTo(drone, tx, ty, dur){
+  const el = drone.el;
+  const cx = parseFloat(el.style.left), cy = parseFloat(el.style.top);
+  await animateMove(el, {x:cx,y:cy}, {x:tx,y:ty}, dur);
+}
+
+/* ================= 爆炸 / 干扰特效 ================= */
+function explosion(xPct, yPct){
+  const fx = $('fxLayer');
+  const exp = document.createElement('div');
+  exp.className='explosion';
+  exp.style.left=xPct+'%'; exp.style.top=yPct+'%';
+  let sparks='';
+  for(let i=0;i<8;i++){
+    const ang = rand(0,Math.PI*2), dist = rand(18,42);
+    sparks += `<span class="spark" style="--sx:${Math.cos(ang)*dist}px;--sy:${Math.sin(ang)*dist}px;left:50%;top:50%;"></span>`;
+  }
+  exp.innerHTML = `<div class="core"></div><div class="ring1"></div>${sparks}`;
+  fx.appendChild(exp);
+  setTimeout(()=>exp.remove(), 1200);
+}
+function jamWave(xPct, yPct){
+  const fx = $('fxLayer');
+  const w = document.createElement('div');
+  w.className='jam-wave'; w.style.left=xPct+'%'; w.style.top=yPct+'%';
+  fx.appendChild(w); setTimeout(()=>w.remove(), 900);
+}
+
+/* ================= 阶段一：卫星侦察 ================= */
+async function phase1Scan(){
+  if(G.step!=='start') return;
+  G.step='working'; disableBtn(); setPhaseUI(1);
+  $('aiNode').style.display='none';
+  showExplain('① <b>卫星不是万能的</b>：地形遮挡导致部分目标只能标注为「疑似目标·地形盲区」；<br>② <b>定位误差</b>：光学/雷达成像存在测量噪声，侦察坐标与实际坐标存在 ±15~80m 随机偏差。|||<span style="color:#ffd166">请观察：哪些目标可见？哪些目标被盲区遮挡？侦察坐标与真实坐标偏离多少？</span>');
+  autoCloseExplain();
+  setPanel('任务数据', '<div style="color:var(--text-dim);font-size:12px;">正在执行卫星侦察任务……</div>');
+  log('星眸卫星机动至侦察轨道','');
+  await moveSatellite(50, 5);
+  await scanAnimation(1, (p)=>{
+    // 扫描线扫过即揭示：线到达目标纵坐标时，基地逐渐浮现
+    let changed = false;
+    G.targets.forEach(t=>{
+      if(!t.revealed && t.realY <= p*100 + 2){
+        t.revealed = true;
+        if(!t.blind) t.visible = true;
+        changed = true;
+      }
+    });
+    if(changed) renderTargets();
+  });
+  log('星眸卫星发现目标群，开始解析坐标','ok');
+
+  // 扫描完成，所有目标已浮现
+  const vis = G.targets.filter(t=>!t.blind);
+  const hidden = G.targets.filter(t=>t.blind);
+  await sleep(400);
+  log(`扫描完成：共 ${G.targets.length} 个目标，可见 ${vis.length} 个，地形盲区 ${hidden.length} 个`, 'warn');
+  renderReconTable();
+  updateEstCost();
+  setPhaseStatus('阶段一 · 卫星侦察完成', '星眸卫星已回传目标坐标。可见目标已纳入打击候选，地形盲区目标仅标记为「疑似目标」。点击底部按钮进入 AI 任务分配。');
+  G.step='to2'; setBtn('进入 AI 任务分配');
+}
+function renderReconTable(){
+  let rows='';
+  G.targets.forEach(t=>{
+    if(t.blind && !t.visible){
+      rows += `<tr><td>${t.type}</td><td><span class="tag blind">未知</span></td><td style="color:#9aa7bd">—</td><td>(${t.realX.toFixed(1)}, ${t.realY.toFixed(1)})</td><td><span class="tag blind">疑似目标·地形盲区</span></td></tr>`;
+    } else {
+      const accCls = t.errText<=30 ? 'acc-high' : (t.errText<=55 ? 'acc-mid' : 'acc-low');
+      const accLv = t.errText<=30 ? '高' : (t.errText<=55 ? '中' : '低');
+      rows += `<tr><td>${t.type}</td><td><span class="tag ${t.threat==='高'?'high':t.threat==='中'?'mid':'low'}">${t.threat}</span></td><td>${distKm(t)} km</td><td style="color:#ffd166">(${t.detX.toFixed(1)}, ${t.detY.toFixed(1)})</td><td><span class="tag ${accCls}">精度${accLv} · ±${t.errText}m</span></td></tr>`;
+    }
+  });
+  setPanel('侦察数据 · 真实坐标 vs 侦察坐标', `<table class="tbl"><tr><th>目标</th><th>威胁</th><th>距离</th><th>侦察坐标</th><th>定位精度</th></tr>${rows}</table>
+  <div style="margin-top:6px;font-size:11px;color:var(--text-dim)">精度分级：<span class="tag acc-high">高 ≤30m</span> <span class="tag acc-mid">中 31-55m</span> <span class="tag acc-low">低 &gt;55m</span> · 共 ${G.targets.length} 个目标 · 可见 ${G.targets.filter(t=>!t.blind).length} · 盲区 ${G.targets.filter(t=>t.blind).length}（坐标单位：战场百分比）</div>`);
+}
+
+/* ================= 阶段二：AI 任务分配 ================= */
+function strikeCfg(){
+  const v = id => { const x = parseFloat($(id).value); return (isNaN(x)||x<1) ? 1 : x; };
+  return {
+    high: Math.round(v('cfgHigh')), mid: Math.round(v('cfgMid')), low: Math.round(v('cfgLow')),
+    r2: v('cfgRetry2'), r3: v('cfgRetry3')
+  };
+}
+function needOf(threat){
+  const c = strikeCfg();
+  return threat==='高' ? c.high : threat==='中' ? c.mid : c.low;
+}
+function updateEstCost(){
+  const el = $('estCost');
+  const hint = $('estCostHint');
+  if(!el) return;
+  const vis = G.targets.filter(t=>t.visible && !t.blind);
+  if(!vis.length){ el.textContent = '待侦察'; return; }
+  const total = vis.reduce((s,t)=>s+needOf(t.threat),0);
+  const kind = $('cfgStrikeKind') ? $('cfgStrikeKind').value : 'uav';
+  const ut = $('cfgUAVType') ? $('cfgUAVType').value : 'lm';
+  let cost, txt;
+  if(kind==='missile'){
+    cost = total*MISSILE_COST; txt = `（导弹 × ${total} 枚）`;
+  } else if(kind==='ew'){
+    cost = total*EW_COST + total*uavTypeCost(ut); txt = `（干扰机 ${total} 架 + ${uavTypeName(ut)} ${total} 架）`;
+  } else {
+    cost = total*uavTypeCost(ut); txt = `（${uavTypeName(ut)} × ${total} 架）`;
+  }
+  if(hint) hint.textContent = txt;
+  el.textContent = fmtMoney(cost);
+}
+function assignTargets(){
+  const vis = G.targets.filter(t=>t.visible && !t.blind);
+  vis.forEach(t=>{ t.dist = distKm(t); });
+  // 威胁等级映射
+  const tv = {'高':3,'中':2,'低':1};
+  // ① 威胁降序 ② 同级距离升序
+  vis.sort((a,b)=> tv[b.threat]-tv[a.threat] || a.dist-b.dist);
+  // ③ 贪心分配（饱和式：每目标出动机数按打击规模设置，默认高6/中4/低2）
+  let pool = randInt(18,24);
+  const assigned = [];
+  for(const t of vis){
+    const need = needOf(t.threat);
+    if(pool >= need){ t.assigned=need; pool-=need; t.ammoShort=false; }
+    else if(pool>0){ t.assigned=pool; pool=0; t.ammoShort=true; }
+    else { t.assigned=0; t.ammoShort=true; }
+    if(t.assigned>0) assigned.push(t);
+  }
+  G.assignedTotal = assigned.reduce((s,t)=>s+t.assigned,0);
+  G.reserve = randInt(6,9); // 备用蜂群单元（供二次/三次补击）
+  return {vis, assigned, pool};
+}
+async function phase2Assign(){
+  if(G.step!=='to2') return;
+  G.step='working'; disableBtn(); setPhaseUI(2);
+  // 读取本次打击资产配置
+  G.uavType = $('cfgUAVType').value;
+  G.strikeKind = $('cfgStrikeKind').value;
+  const kindName = {uav:'蜂群打击', missile:'导弹打击', ew:'电子干扰压制'}[G.strikeKind];
+  const utName = uavTypeName(G.uavType);
+  const kindDesc = G.strikeKind==='uav' ? `蜂群类型：<b>${utName}</b>（${uavTypeDesc(G.uavType)}）` :
+    G.strikeKind==='missile' ? `打击手段：<b>导弹</b>（远程精确打击，${MISSILE_COST} 万美元/枚）` :
+    `打击手段：<b>电子干扰压制</b>（干扰机压制目标防御后，${utName} 蜂群跟进）`;
+  showExplain(`① <b>威胁等级优先</b>：高威胁（导弹发射车/指挥所/雷达站）&gt; 中 &gt; 低；<br>② <b>同级距离近优先</b>：缩短突防暴露时间；<br>③ <b>贪心分配</b>：在有限弹药下依次满足，弹药不足时优先保障高价值目标。<br>④ <b>本次方案</b>：${kindName} — ${kindDesc}|||<span style="color:#ffd166">观察右下角连线：卫星数据 → AI决策 → 打击单元分配。</span>`);
+  autoCloseExplain();
+  setPanel('任务数据', '<div style="color:var(--text-dim);font-size:12px;">AI 正在读取卫星数据并规划打击方案……</div>');
+  log('AI 决策中心接入星眸卫星数据链路','');
+
+  // 连线动画：卫星 → AI → 基地
+  $('aiNode').style.display='flex';
+  const svg = $('linkSvg'); svg.innerHTML='';
+  const sPos = bfPos($('satellite')), aPos = bfPos($('aiNode')), bPos = bfPos($('unitBase'));
+  const mkLine=(x1,y1,x2,y2,color)=>{
+    const ns='http://www.w3.org/2000/svg';
+    const l=document.createElementNS(ns,'line');
+    l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x1);l.setAttribute('y2',y1);
+    l.setAttribute('stroke',color);l.setAttribute('stroke-width','2');l.setAttribute('stroke-dasharray','6 4');
+    l.setAttribute('opacity','0.9'); svg.appendChild(l);
+    l.setAttribute('x2',x2);l.setAttribute('y2',y2);
+    l.style.transition='all .8s ease';
+    requestAnimationFrame(()=>{ l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2); });
+    const c=document.createElementNS(ns,'circle');
+    c.setAttribute('r','4');c.setAttribute('fill',color);
+    const am=document.createElementNS(ns,'animateMotion');
+    am.setAttribute('dur','1.1s');am.setAttribute('repeatCount','indefinite');
+    am.setAttribute('path',`M ${x1} ${y1} L ${x2} ${y2}`);
+    c.appendChild(am); svg.appendChild(c);
+  };
+  mkLine(sPos.x,sPos.y, aPos.x,aPos.y, '#00d4ff');
+  await sleep(400);
+  mkLine(aPos.x,aPos.y, bPos.x,bPos.y, '#b26bff');
+  await sleep(1600);
+
+  // 计算分配
+  const {vis, assigned, pool} = assignTargets();
+  await sleep(500);
+  const unitWord = G.strikeKind==='missile' ? '枚导弹' : G.strikeKind==='ew' ? '架干扰机+蜂群' : '架打击单元';
+  log(`AI 完成分配：出动 ${G.assignedTotal} ${unitWord}，备用 ${G.reserve} 架${pool>0?'，剩余弹药 '+pool+' 架':''}`, 'ok');
+  renderAssignTable(vis, assigned, pool);
+
+  // 在基地显示编队单元（按蜂群类型/手段生成）
+  const names = [];
+  let idx = {i:1};
+  if(G.strikeKind==='missile'){
+    vis.forEach(t=>{ names.push(...buildSpecialUnits('导弹', t.assigned, idx, 'msl').map(u=>{u.target=t; return u;})); });
+    spawnMissiles(names, 8, 64);
+  } else if(G.strikeKind==='ew'){
+    vis.forEach(t=>{
+      names.push(...buildSpecialUnits('干扰', t.assigned, idx, 'ew').map(u=>{u.target=t; return u;}));
+      names.push(...buildUAVNames(t.assigned, t, idx));
+    });
+    spawnEWUnits(names.filter(u=>u.type==='ew'), 8, 64);
+    spawnDrones(names.filter(u=>u.type!=='ew'), 8, 64);
+  } else {
+    vis.forEach(t=>{ names.push(...buildUAVNames(t.assigned, t, idx)); });
+    spawnDrones(names, 8, 64);
+  }
+  G.drones = names;
+  if(G.uavType==='mix'){
+    const cnt = {};
+    names.forEach(u=>{ cnt[u.type]=(cnt[u.type]||0)+1; });
+    log('集群混编组成：'+Object.keys(cnt).map(k=>uavTypeName(k)+'×'+cnt[k]).join('，'), 'ok');
+  }
+
+  setPhaseStatus('阶段二 · AI 任务分配完成', `AI 按「威胁高→低、距离近→远、弹药贪心」完成${unitWord}分配，右侧为算法表格与伪代码。点击底部按钮发起${G.strikeKind==='missile'?'导弹突袭':G.strikeKind==='ew'?'电子压制与突防':'蜂群突防'}。`);
+  G.step='to3'; setBtn(G.strikeKind==='missile'?'发起导弹突袭':G.strikeKind==='ew'?'发起电子压制与突防':'发起蜂群突防');
+}
+function renderAssignTable(vis, assigned, pool){
+  const assetName = G.strikeKind==='missile' ? '导弹' : G.strikeKind==='ew' ? '干扰机+'+uavTypeName(G.uavType) : uavTypeName(G.uavType);
+  let rows='';
+  assigned.forEach((t,i)=>{
+    const no = t.assigned===0;
+    rows += `<tr><td>${i+1}. ${t.type}</td><td><span class="tag ${t.threat==='高'?'high':t.threat==='中'?'mid':'low'}">${t.threat}</span></td><td>${t.dist} km</td><td>${no?'<span class="tag alive">弹药不足</span>':t.assigned+' '+assetName}</td></tr>`;
+  });
+  const missed = vis.length - assigned.length;
+  const pseudo = `<div class="pseudo"><span class="cm"># AI 调度 · 优先级排序 + 贪心分配</span>
+<span class="kw">sort</span>(T, 威胁等级 <span class="kw">desc</span>)   <span class="cm"># 高&gt;中&gt;低</span>
+<span class="kw">sort</span>(同级, 距离 <span class="kw">asc</span>)      <span class="cm"># 近优先</span>
+<span class="kw">for</span> 目标 <span class="kw">in</span> T:
+    need = 打击规模(威胁)  <span class="cm"># 默认高6/中4/低2，可自定义</span>
+    asset = 所选打击方案    <span class="cm"># ${assetName}（单价 ${G.strikeKind==='missile'?MISSILE_COST:G.strikeKind==='ew'?EW_COST:uavTypeCost(G.uavType)} 万美元/单元）</span>
+    <span class="kw">if</span> 弹药池 ≥ need: 分配 need 个资产
+    <span class="kw">else</span>: 标记「弹药不足」 <span class="kw">break</span></div>`;
+  setPanel('AI 分配表 · 目标-威胁-距离-打击资产', `
+    <table class="tbl"><tr><th>目标</th><th>威胁</th><th>距离</th><th>分配资产</th></tr>${rows}</table>
+    <div style="margin-top:6px;font-size:11px;color:var(--text-dim)">出动 ${G.assignedTotal} 个${assetName} · 备用 ${G.reserve} 架${missed>0?' · 弹药耗尽未分配 '+missed+' 个':''}</div>
+    <div style="margin-top:10px;font-size:12px;color:var(--cyan);letter-spacing:1px">— AI 调度伪代码 —</div>
+    ${pseudo}`);
+}
+
+/* ================= 阶段三：突防与打击 ================= */
+async function phase3Strike(){
+  if(G.step!=='to3') return;
+  if(G.strikeKind==='missile') return phase3Missile();
+  if(G.strikeKind==='ew') return phase3EW();
+  return phase3UAV();
+}
+/* —— 手段一：蜂群突防打击（按无人机类型差异化） —— */
+async function phase3UAV(){
+  if(G.step!=='to3') return;
+  G.step='working'; disableBtn(); setPhaseUI(3);
+  showExplain('① <b>分段突防</b>：打击编队沿规划航路分航段推进，全程高速机动；<br>② <b>电子干扰与防空拦截</b>：突防链路存在 <span style="color:#ff6a3d">电磁干扰丢包</span>，目标防空火力也会<b>拦截击落</b>单元；被击落单元<b>不停留等待</b>，惯性前冲坠毁；<br>③ 成功抵达单元对目标执行<b>火力打击</b>，命中概率与毁伤受类型、定位误差、目标防御影响；<b>察打一体</b>可回收返航。|||<span style="color:#ffd166">观察：不同无人机类型的机动与打击差异；诱饵掩护下真实单元的突防表现。</span>');
+  autoCloseExplain();
+  setPanel('任务数据', '<div style="color:var(--text-dim);font-size:12px;">打击编队起飞，正在沿规划路径突防……</div>');
+  log(`打击编队 ${G.assignedTotal} 架出动（${uavTypeName(G.uavType)}${G.uavType==='dc'?'掩护编队':G.uavType==='mix'?'：诱饵开路+巡飞主攻+察打清除+改装补充':''}），进入突防走廊`, '');
+
+  // 清除基地预览单元，生成真实编队
+  $('dronesLayer').innerHTML='';
+  const units = G.drones;
+  const startX=8, startY=64;
+  spawnDrones(units, startX, startY);
+  // 记录首轮出动编队（供最终战果弹窗图形化展示）
+  G.fleet = units.map(u=>({name:u.name, round:1, lost:false, type:u.type, returned:false}));
+
+  // 预决定被电子干扰单元（概率可控，不超过45%）
+  const total = units.length;
+  const jamN = Math.min(Math.round(total*rand(0.12,0.32)), Math.floor(total*0.45));
+  const jamIdx = new Set();
+  while(jamIdx.size < jamN) jamIdx.add(randInt(0, total-1));
+  G.interferedCount = 0; // 实际损失在突防中逐架累计
+  log(`战场电子对抗强度评估：${jamN} 个单元面临电磁干扰风险，另有防空火力拦截威胁`, 'warn');
+
+  // 按目标分组顺序出击
+  const targetsInOrder = [];
+  G.targets.filter(t=>t.visible && !t.blind && t.assigned>0)
+    .sort((a,b)=> a.dist-b.dist)
+    .forEach(t=>targetsInOrder.push(t));
+
+  for(const t of targetsInOrder){
+    const group = units.filter(u=>u.target===t && !u.done);
+    if(!group.length) continue;
+    const hasDecoy = group.some(u=>u.type==='dc');
+    // 分队起飞移动：基地 → 中途航点 → 目标
+    const wp = { x: clamp((startX+t.detX)/2 + rand(-6,6), 12, 88), y: clamp((startY+t.detY)/2 + rand(-8,8), 8, 90) };
+    const tx = t.detX, ty = t.detY;
+    // 移动第一段
+    await Promise.all(group.map(async (u,gi)=>{
+      await moveDroneTo(u, wp.x + gi*1.2, wp.y, 900+gi*120);
+    }));
+    // 第二段突防：电磁干扰 + 防空拦截（诱饵掩护 / 被击落单元不停留等待，惯性前冲坠毁）
+    const alive = [];
+    for(const u of group){
+      const jamHit = jamIdx.has(units.indexOf(u));
+      let intP = clamp(0.05 + t.def*0.45 + (jamHit?1:0), 0, 0.36);
+      if(u.type==='dc') intP = Math.min(0.55, intP*1.5);   // 诱饵主动暴露，吸引防空火力
+      else if(hasDecoy) intP = intP*0.42;                  // 诱饵掩护：真实单元拦截率大幅下降
+      const lost = Math.random() < intP;
+      if(lost){
+        u.interfered = true;
+        const fleetItem = G.fleet.find(f=>f.name===u.name); if(fleetItem) fleetItem.lost = true;
+        G.interferedCount++;
+        u.el.classList.add('interfered');
+        u.el.querySelector('.d-tag').textContent += jamHit?'·失联':'·被拦截';
+        jamWave(parseFloat(u.el.style.left), parseFloat(u.el.style.top));
+        await sleep(120);
+        // 不停留：惯性前冲至目标附近后坠毁爆炸
+        await moveDroneTo(u, tx + rand(-3,3), ty + rand(-1,2), 380);
+        explosion(parseFloat(u.el.style.left), parseFloat(u.el.style.top));
+        toast(`⚠ ${u.name} ${jamHit?'遭电子干扰失联':'被防空火力拦截'}，坠毁`);
+        log(`${u.name} ${jamHit?'遭遇电子干扰，数据链失联':'突防途中被「'+t.type+'」防空火力拦截'}，坠毁`, 'danger');
+        await sleep(300);
+        u.el.style.transition='transform .4s ease';
+        u.el.style.transform='rotate(50deg) scale(.7)';
+        u.el.classList.add('crashed');
+        await sleep(120);
+      } else {
+        alive.push(u);
+      }
+    }
+    if(!alive.length){ log(`目标「${t.type}」打击分队全军覆没`, 'danger'); continue; }
+    // 继续第二段移动
+    await Promise.all(alive.map((u,gi)=>moveDroneTo(u, tx + gi*1.6, ty + 2, 800+gi*100)));
+    // 抵达，执行打击
+    for(const u of alive){
+      u.el.classList.add('striking');
+      u.done = true;
+      await sleep(320);
+    }
+    // 打击：爆炸 + 命中判定（按类型差异）
+    const hits = [];
+    for(const u of alive){
+      const cfg = UAV_TYPES[u.type] || UAV_TYPES.lm;
+      if(cfg.dmgMul<=0){ // 诱饵：不爆炸，悬停诱骗后撤离
+        toast(`诱饵单元 ${u.name} 吸引防空火力，掩护编队完成突防`);
+        log(`${u.name}（诱饵）不携带战斗部，完成雷达诱骗后撤离`, 'warn');
+        continue;
+      }
+      const hitRate = clamp(0.88 - t.def - (t.errX+t.errY)/220*0.12 - (u.interfered?0.3:0) + cfg.hitAdj + (hasDecoy?0.06:0), 0.38, 0.95);
+      const hit = Math.random() < hitRate;
+      const dmg = hit ? Math.round(randInt(65,100)*cfg.dmgMul) : 0;
+      hits.push({u, hit, dmg});
+      t.hp -= dmg;
+      if(hit) t.hits++;
+      explosion(t.detX + rand(-2,2), t.detY + rand(-2,2));
+      await sleep(420);
+      updateHpBars();
+    }
+    hits.forEach(h=>{
+      const dmgTxt = h.hit ? `命中，毁伤 ${h.dmg}` : '未命中';
+      log(`${h.u.name} 对「${t.type}」执行火力打击 → ${dmgTxt}`, h.hit?'ok':'warn');
+    });
+    // 察打一体：完成定点清除后返航回收
+    const returnable = alive.filter(u=>UAV_TYPES[u.type] && UAV_TYPES[u.type].reusable && !u.interfered);
+    for(const u of returnable){
+      u.returned = true;
+      const fleetItem = G.fleet.find(f=>f.name===u.name); if(fleetItem) fleetItem.returned = true;
+      u.el.classList.add('returned');
+      await moveDroneTo(u, startX + rand(-2,2), startY + rand(-2,2), 900);
+      toast(`✓ ${u.name} 完成定点清除，返航回收`);
+      log(`${u.name}（察打一体）完成定点清除，返航回收`, 'ok');
+    }
+    if(t.hp <= 0){
+      t.destroyed = true;
+      renderTargets(); updateHpBars();
+      log(`目标「${t.type}」已被摧毁`, 'ok');
+      toast('🎯 目标已被摧毁');
+    } else {
+      log(`目标「${t.type}」仍有战斗力（剩余 ${Math.max(0,t.hp)}/${t.maxHp}）`, 'warn');
+    }
+    await sleep(500);
+  }
+  // 清空干扰/打击状态，报告
+  renderTargets();
+  log('打击波次结束，编队开始返航','');
+  $('dronesLayer').querySelectorAll('.drone').forEach(d=>{
+    d.classList.remove('striking');
+    if(!d.classList.contains('interfered') && !d.classList.contains('returned')) d.classList.add('back');
+  });
+  renderStrikeReport();
+  setPhaseStatus('阶段三 · 蜂群突防与打击完成', `${uavTypeName(G.uavType)}编队完成突防打击${G.uavType==='dc'?'（诱饵掩护）':G.uavType==='mix'?'（高低搭配集群混编）':''}。被拦截单元已坠毁（残骸保留于战场），察打一体单元返航回收，成功抵达单元已完成火力毁伤。点击底部按钮进入打击效果评估。`);
+  G.step='to4'; setBtn('打击效果评估');
+}
+/* —— 手段二：导弹远程精确打击 —— */
+async function phase3Missile(){
+  if(G.step!=='to3') return;
+  G.step='working'; disableBtn(); setPhaseUI(3);
+  showExplain('① <b>远程导弹突袭</b>：从后方发射战术/巡航导弹，高弹道高速突防；<br>② <b>防空拦截</b>：目标防空火力可拦截少量导弹，高空高速突防拦截率低；<br>③ 导弹命中后<b>大威力毁伤</b>，单发毁伤显著高于蜂群单元。|||<span style="color:#ffd166">观察：导弹弧形弹道与命中爆炸威力；高成本换来的快速摧毁。</span>');
+  autoCloseExplain();
+  setPanel('任务数据', '<div style="color:var(--text-dim);font-size:12px;">导弹部队进入发射阵位，正在执行远程精确打击……</div>');
+  log(`远程导弹 ${G.assignedTotal} 枚发射，进入高弹道突防`, '');
+
+  $('dronesLayer').innerHTML='';
+  const units = G.drones;
+  const startX=8, startY=64;
+  spawnMissiles(units, startX, startY);
+  G.fleet = units.map(u=>({name:u.name, round:1, lost:false, type:'msl', returned:false}));
+  G.interferedCount = 0;
+
+  const targetsInOrder = G.targets.filter(t=>t.visible && !t.blind && t.assigned>0).sort((a,b)=>a.dist-b.dist);
+  for(const t of targetsInOrder){
+    const group = units.filter(u=>u.target===t && !u.done);
+    if(!group.length) continue;
+    const tx = t.detX, ty = t.detY;
+    // 弧形弹道：基地 → 高弹道弧顶 → 目标
+    await Promise.all(group.map(async (u,gi)=>{
+      const midX = (startX+tx)/2 + rand(-4,4), midY = Math.min(startY,ty) - rand(14,20);
+      await moveDroneTo(u, midX, midY, 1100+gi*100);
+      await moveDroneTo(u, tx + gi*2, ty + 2, 900+gi*80);
+    }));
+    // 防空拦截（低概率）
+    const alive = [];
+    for(const u of group){
+      const intP = clamp(t.def*0.12, 0.02, 0.12);
+      if(Math.random()<intP){
+        const fleetItem = G.fleet.find(f=>f.name===u.name); if(fleetItem) fleetItem.lost=true;
+        G.interferedCount++;
+        explosion(parseFloat(u.el.style.left), parseFloat(u.el.style.top));
+        u.el.style.transition='transform .35s ease';
+        u.el.style.transform='rotate(45deg) scale(.7)';
+        u.el.classList.add('crashed');
+        log(`${u.name} 被「${t.type}」防空火力拦截，空中解体`, 'danger');
+        await sleep(120);
+      } else { u.el.classList.add('striking'); alive.push(u); }
+    }
+    if(!alive.length){ log(`对「${t.type}」的导弹分队被全数拦截`, 'danger'); continue; }
+    // 命中判定：高命中、大毁伤
+    for(const u of alive){
+      const hitRate = clamp(0.94 - t.def*0.2, 0.78, 0.97);
+      const hit = Math.random()<hitRate;
+      const dmg = hit ? randInt(110,170) : 0;
+      t.hp -= dmg; if(hit) t.hits++;
+      explosion(t.detX+rand(-2,2), t.detY+rand(-2,2));
+      await sleep(420); updateHpBars();
+      log(`${u.name} 命中「${t.type}」→ ${hit?'毁伤 '+dmg:'未命中'}`, hit?'ok':'warn');
+    }
+    if(t.hp<=0){ t.destroyed=true; renderTargets(); updateHpBars(); log(`目标「${t.type}」已被导弹摧毁`,'ok'); toast('🎯 目标已被摧毁'); }
+    else log(`目标「${t.type}」仍有战斗力（剩余 ${Math.max(0,t.hp)}/${t.maxHp}）`,'warn');
+    await sleep(500);
+  }
+  renderTargets();
+  log('导弹打击波次结束','');
+  renderStrikeReport();
+  setPhaseStatus('阶段三 · 导弹突袭完成', '远程导弹完成高弹道精确打击，防空拦截率低、毁伤大。点击底部按钮进入打击效果评估。');
+  G.step='to4'; setBtn('打击效果评估');
+}
+/* —— 手段三：电子干扰压制 + 蜂群跟进 —— */
+async function phase3EW(){
+  if(G.step!=='to3') return;
+  G.step='working'; disableBtn(); setPhaseUI(3);
+  const uavName = uavTypeName(G.uavType);
+  showExplain(`① <b>电子干扰压制</b>：干扰机率先突入，释放宽带干扰压制目标防空雷达与通信链路；<br>② 目标<b>防御能力大幅下降</b>，防空拦截率显著降低；<br>③ ${uavName} 编队趁压制窗口跟进打击；干扰机完成压制后<b>返航回收</b>。|||<span style="color:#ffd166">观察：干扰机释放紫色干扰波纹 → 目标防御下降 → 编队低损突防。</span>`);
+  autoCloseExplain();
+  setPanel('任务数据', '<div style="color:var(--text-dim);font-size:12px;">电子干扰机编队起飞，正在接近目标空域……</div>');
+  log(`电子干扰机 ${G.assignedTotal} 架出动，执行电磁压制`, '');
+
+  $('dronesLayer').innerHTML='';
+  const ewUnits = G.drones.filter(u=>u.type==='ew');
+  const uavUnits = G.drones.filter(u=>u.type!=='ew');
+  const startX=8, startY=64;
+  spawnEWUnits(ewUnits, startX, startY);
+  spawnDrones(uavUnits, startX, startY);
+  G.fleet = G.drones.map(u=>({name:u.name, round:1, lost:false, type:u.type, returned:false}));
+  G.interferedCount = 0;
+
+  const targetsInOrder = G.targets.filter(t=>t.visible && !t.blind && t.assigned>0).sort((a,b)=>a.dist-b.dist);
+  for(const t of targetsInOrder){
+    const tEw = ewUnits.filter(u=>u.target===t && !u.done);
+    const tUav = uavUnits.filter(u=>u.target===t && !u.done);
+    if(!tEw.length && !tUav.length) continue;
+    const tx = t.detX, ty = t.detY;
+    // ① 干扰机率先突入并释放压制
+    if(tEw.length){
+      const wp = { x: clamp((startX+tx)/2+rand(-5,5),12,88), y: clamp((startY+ty)/2+rand(-8,8),8,90) };
+      await Promise.all(tEw.map((u,gi)=>moveDroneTo(u, wp.x+gi*1.2, wp.y, 800+gi*100)));
+      await Promise.all(tEw.map((u,gi)=>moveDroneTo(u, tx+gi*1.4, ty+3, 700+gi*80)));
+      tEw.forEach(u=>{
+        u.done = true;
+        const z = document.createElement('div');
+        z.className = 'ew-zone';
+        z.style.left = tx+'%'; z.style.top = ty+'%';
+        $('dronesLayer').appendChild(z);
+        u.zone = z;
+      });
+      log(`干扰机已就位，对「${t.type}」释放宽带电磁压制`, 'warn');
+      await sleep(700);
+    }
+    const defNow = t.def*0.4; // 压制后防御大幅下降
+    // ② 编队趁压制窗口突防打击（含诱饵掩护）
+    if(tUav.length){
+      const wp2 = { x: clamp((startX+tx)/2+rand(-6,6),12,88), y: clamp((startY+ty)/2+rand(-8,8),8,90) };
+      await Promise.all(tUav.map(async (u,gi)=>{ await moveDroneTo(u, wp2.x+gi*1.2, wp2.y, 900+gi*120); }));
+      const hasDecoy = tUav.some(u=>u.type==='dc');
+      const alive = [];
+      for(const u of tUav){
+        let intP = clamp(0.03 + defNow*0.45, 0.03, 0.18);
+        if(u.type==='dc') intP = Math.min(0.55, intP*1.5);
+        else if(hasDecoy) intP = intP*0.4;
+        if(Math.random()<intP){
+          u.interfered = true;
+          const fleetItem = G.fleet.find(f=>f.name===u.name); if(fleetItem) fleetItem.lost=true;
+          G.interferedCount++;
+          u.el.classList.add('interfered');
+          u.el.querySelector('.d-tag').textContent += '·被拦截';
+          jamWave(parseFloat(u.el.style.left), parseFloat(u.el.style.top));
+          await sleep(120);
+          await moveDroneTo(u, tx+rand(-3,3), ty+rand(-1,2), 380);
+          explosion(parseFloat(u.el.style.left), parseFloat(u.el.style.top));
+          toast(`⚠ ${u.name} 遭防空火力拦截，坠毁`);
+          log(`${u.name} 突防途中被「${t.type}」防空火力拦截，坠毁`, 'danger');
+          await sleep(300);
+        u.el.style.transition='transform .4s ease';
+        u.el.style.transform='rotate(50deg) scale(.7)';
+        u.el.classList.add('crashed');
+        await sleep(120);
+        } else alive.push(u);
+      }
+      if(alive.length){
+        await Promise.all(alive.map((u,gi)=>moveDroneTo(u, tx+gi*1.6, ty+2, 750+gi*100)));
+        for(const u of alive){ u.el.classList.add('striking'); u.done=true; await sleep(300); }
+        for(const u of alive){
+          const cfg = UAV_TYPES[u.type]||UAV_TYPES.lm;
+          if(cfg.dmgMul<=0){ toast(`诱饵单元 ${u.name} 吸引防空火力，掩护编队突防`); continue; }
+          const hitRate = clamp(0.90 - defNow - (t.errX+t.errY)/220*0.1 + cfg.hitAdj + (hasDecoy?0.05:0), 0.5, 0.96);
+          const hit = Math.random()<hitRate;
+          const dmg = hit ? Math.round(randInt(65,100)*cfg.dmgMul) : 0;
+          t.hp -= dmg; if(hit) t.hits++;
+          explosion(t.detX+rand(-2,2), t.detY+rand(-2,2));
+          await sleep(400); updateHpBars();
+          log(`${u.name} 在压制窗口内对「${t.type}」${hit?'命中，毁伤 '+dmg:'未命中'}`, hit?'ok':'warn');
+        }
+        // 察打一体返航回收
+        for(const u of alive){
+          const cfg = UAV_TYPES[u.type]||UAV_TYPES.lm;
+          if(cfg.reusable && !u.interfered){
+            u.returned = true;
+            const fleetItem = G.fleet.find(f=>f.name===u.name); if(fleetItem) fleetItem.returned = true;
+            u.el.classList.add('returned');
+            await moveDroneTo(u, startX+rand(-2,2), startY+rand(-2,2), 900);
+            toast(`✓ ${u.name} 完成定点清除，返航回收`);
+          }
+        }
+      }
+    }
+    // ③ 干扰机完成压制后返航回收
+    if(tEw.length){
+      await Promise.all(tEw.map(async u=>{
+        const fleetItem = G.fleet.find(f=>f.name===u.name);
+        if(fleetItem) fleetItem.returned = true;
+        u.returned = true; u.el.classList.add('returned');
+        if(u.zone) u.zone.remove();
+        await moveDroneTo(u, startX+rand(-2,2), startY+rand(-2,2), 850);
+      }));
+      log(`干扰机完成对「${t.type}」的压制，返航回收`, 'ok');
+    }
+    if(t.hp<=0){ t.destroyed=true; renderTargets(); updateHpBars(); log(`目标「${t.type}」已被摧毁`,'ok'); toast('🎯 目标已被摧毁'); }
+    else log(`目标「${t.type}」仍有战斗力（剩余 ${Math.max(0,t.hp)}/${t.maxHp}）`,'warn');
+    await sleep(400);
+  }
+  renderTargets();
+  $('dronesLayer').querySelectorAll('.drone').forEach(d=>{
+    d.classList.remove('striking');
+    if(!d.classList.contains('interfered') && !d.classList.contains('returned')) d.classList.add('back');
+  });
+  renderStrikeReport();
+  setPhaseStatus('阶段三 · 电子压制与打击完成', '干扰机压制目标防御后编队跟进打击，干扰机与察打一体单元已返航回收。点击底部按钮进入打击效果评估。');
+  G.step='to4'; setBtn('打击效果评估');
+}
+function renderStrikeReport(){
+  const destroyed = G.targets.filter(t=>t.destroyed).length;
+  const visCount = G.targets.filter(t=>t.visible && !t.blind).length;
+  const hits = G.targets.reduce((s,t)=>s+t.hits,0);
+  const unitWord = G.strikeKind==='missile' ? '导弹' : G.strikeKind==='ew' ? '干扰机+编队' : uavTypeName(G.uavType);
+  const mixDesc = G.uavType==='mix' ? '（' + ['rc','lm','mc','dc'].map(k=>{ const n=G.fleet?G.fleet.filter(f=>f.type===k).length:0; return n?({rc:'察打'+n,lm:'巡飞'+n,mc:'改装'+n,dc:'诱饵'+n})[k]:''; }).filter(Boolean).join('+') + '）' : '';
+  const returned = G.fleet ? G.fleet.filter(f=>f.returned).length : 0;
+  setPanel('突防打击战报', `
+    <div class="report-card">
+      <div class="report-row"><span class="k">出动单元</span><span class="v">${G.assignedTotal} 个${unitWord}${mixDesc}</span></div>
+      <div class="report-row"><span class="k">电子干扰/拦截损失</span><span class="v" style="color:${G.interferedCount?'var(--red)':'var(--green)'}">${G.interferedCount} 个</span></div>
+      ${returned?`<div class="report-row"><span class="k">返航回收</span><span class="v" style="color:var(--green)">${returned} 个</span></div>`:''}
+      <div class="report-row"><span class="k">火力命中次数</span><span class="v">${hits} 次</span></div>
+      <div class="report-row"><span class="k">已摧毁目标</span><span class="v">${destroyed} / ${visCount}</span></div>
+      <div class="report-row"><span class="k">目标存活</span><span class="v">${visCount - destroyed}</span></div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">等待卫星二次扫描确认毁伤效果……</div>`);
+}
+
+/* ================= 阶段四：打击效果评估 ================= */
+async function phase4Assess(){
+  if(G.step!=='to4') return;
+  G.step='working'; disableBtn(); hideSubBtn(); setPhaseUI(4);
+  showExplain('① <b>评估闭环</b>：卫星二次扫描，对比打击前后目标状态；<br>② <b>补击决策</b>：若存在存活目标且弹药充足，可「继续补击」或「弹药耗尽直接结束」；弹药耗尽则自动结算；<br>③ 输出<b>战损报告</b>与<b>打击评分</b>（S/A/B/C），形成「侦察→决策→打击→评估」杀伤链闭环。|||<span style="color:#ffd166">观察：哪些目标已摧毁？是否选择补击或弹药耗尽直接结算？</span>');
+  autoCloseExplain();
+  setPanel('任务数据', '<div style="color:var(--text-dim);font-size:12px;">星眸卫星机动，执行打击后二次扫描……</div>');
+  log('星眸卫星变轨，执行打击后二次扫描','');
+  await moveSatellite(50, 5);
+  await scanAnimation(2);
+
+  // 盲区目标部分暴露
+  G.targets.forEach(t=>{
+    if(t.blind && !t.visible && Math.random()<0.55){
+      t.exposed = true; t.visible = true;
+    }
+  });
+  renderTargets(); updateHpBars();
+  updateEstCost();
+  await sleep(500);
+  renderCompareTable();
+  renderFinalReport(1);
+  setPhaseStatus('阶段四 · 打击效果评估完成', '卫星二次扫描已完成毁伤评估。下方为战损报告与打击评分。若存在存活目标且弹药充足，可执行二次补击。');
+  log('卫星二次扫描完成，毁伤评估报告已生成','ok');
+
+  // 玩家决策：弹药充足可选「继续补击」或「弹药耗尽直接结束」；弹药耗尽则只能直接结束
+  const alive = G.targets.filter(t=>t.visible && !t.blind && !t.destroyed);
+  if(alive.length>0 && G.reserve>0){
+    G.step='retryStrike';
+    setBtn('继续二次补击', true);
+    showSubBtn('弹药耗尽 · 直接结束');
+    toast('⚠ 存在存活目标，可继续补击或直接结束');
+    log(`评估结果：${alive.length} 个目标存活，备用弹药 ${G.reserve} 份，可选择继续补击或弹药耗尽直接结束`, 'warn');
+  } else {
+    finishStrike(alive.length>0 ? '弹药耗尽' : '');
+  }
+}
+async function doRetryStrike(round){
+  const is3 = round===3;
+  if(G.step!==(is3?'retryStrike3':'retryStrike')) return;
+  G.step='working'; disableBtn(); hideSubBtn();
+  showExplain(is3
+    ? '执行<b>三次补击</b>：再度加派打击单元对残余目标实施饱和补充打击，进一步提高打击率。'
+    : '执行<b>二次补击</b>：加派更多打击单元（默认为首轮 1.5 倍）对存活目标（含新暴露盲区目标）发起饱和补充打击，按威胁等级优先分配。');
+  autoCloseExplain();
+  const alive = G.targets.filter(t=>t.visible && !t.blind && !t.destroyed);
+  alive.sort((a,b)=>({'高':3,'中':2,'低':1}[b.threat]-{'高':3,'中':2,'低':1}[a.threat]) || a.dist-b.dist);
+  const cfg = strikeCfg();
+  const mult = is3 ? cfg.r3 : cfg.r2;
+  // 饱和式补击：按「首轮规模 × 补击倍数」加派，且高威胁至少 4 架、中威胁至少 2 架，防空无法一次拦截全灭
+  const minNeed = t => t.threat==='高' ? 4 : t.threat==='中' ? 2 : 1;
+  const needList = alive.map(t=>({t, need: Math.max(minNeed(t), Math.ceil(needOf(t.threat)*mult))}));
+  const totalNeed = needList.reduce((s,x)=>s+x.need,0);
+  const spawnN = Math.min(totalNeed, G.reserve);
+  const uavName = uavTypeName(G.uavType);
+  log(`${is3?'三次':'二次'}补击指令下达，加派${uavName} ${spawnN} 架（每目标约 ×${mult}）`, '');
+  // 补击单元沿用首轮蜂群类型（含诱饵掩护混编）
+  const units = buildUAVNames(spawnN, null, {i:G.drones.length+1});
+  units.forEach((u,k)=>{ u.name = (is3?'三击-':'补击-')+String(k+1).padStart(2,'0'); });
+  spawnDrones(units, 8, 64);
+  // 补击单元计入舰队清单（供最终战果弹窗图形化展示）
+  units.forEach(u=>G.fleet.push({name:u.name, round:is3?3:2, lost:false, type:u.type, returned:false}));
+  let ui = 0;
+  for(const item of needList){
+    if(ui>=units.length) break;
+    const t = item.t;
+    const group = units.slice(ui, ui+item.need); ui += group.length;
+    group.forEach(u=>u.target = t);
+    const hasDecoy = group.some(u=>u.type==='dc');
+    // 分队移动（并行）→ 突防拦截判定（被击落单元坠毁，不停留）→ 集火打击
+    await Promise.all(group.map((u,gi)=>moveDroneTo(u, t.detX + gi*1.6, t.detY + 2, 900+gi*100)));
+    const aliveU = [];
+    for(const u of group){
+      let intP = clamp(0.05 + t.def*0.35, 0.05, 0.22);
+      if(u.type==='dc') intP = Math.min(0.55, intP*1.5);
+      else if(hasDecoy) intP = intP*0.42;
+      if(Math.random() < intP){
+        u.interfered = true;
+        const fleetItem = G.fleet.find(f=>f.name===u.name); if(fleetItem) fleetItem.lost = true;
+        G.interferedCount++;
+        u.el.classList.add('interfered');
+        u.el.querySelector('.d-tag').textContent += '·被拦截';
+        jamWave(parseFloat(u.el.style.left), parseFloat(u.el.style.top));
+        explosion(parseFloat(u.el.style.left), parseFloat(u.el.style.top));
+        log(`补击单元 ${u.name} 突防被防空火力拦截，坠毁`, 'danger');
+        await sleep(300);
+        u.el.style.transition='transform .4s ease';
+        u.el.style.transform='rotate(50deg) scale(.7)';
+        u.el.classList.add('crashed');
+        await sleep(120);
+      } else aliveU.push(u);
+    }
+    if(!aliveU.length){ log(`补击分队对「${t.type}」突防失败，全组被防空拦截`, 'danger'); continue; }
+    for(const u of aliveU){ u.el.classList.add('striking'); await sleep(240); }
+    for(const u of aliveU){
+      const cfgT = UAV_TYPES[u.type]||UAV_TYPES.lm;
+      if(cfgT.dmgMul<=0){ toast(`诱饵单元 ${u.name} 吸引防空火力，掩护补击编队`); continue; }
+      const hitRate = clamp(0.84 - t.def + cfgT.hitAdj + (hasDecoy?0.05:0), 0.42, 0.95);
+      const hit = Math.random()<hitRate;
+      const dmg = hit? Math.round(randInt(68,100)*cfgT.dmgMul):0;
+      t.hp -= dmg; if(hit) t.hits++;
+      explosion(t.detX + rand(-2,2), t.detY + rand(-2,2));
+      await sleep(360);
+      updateHpBars();
+      log(`补击单元 ${u.name} 对「${t.type}」${hit?'命中，毁伤 '+dmg:'未命中'}`, hit?'ok':'warn');
+    }
+    // 察打一体补击后返航回收
+    for(const u of aliveU){
+      const cfgT = UAV_TYPES[u.type]||UAV_TYPES.lm;
+      if(cfgT.reusable && !u.interfered){
+        u.returned = true;
+        const fleetItem = G.fleet.find(f=>f.name===u.name); if(fleetItem) fleetItem.returned = true;
+        u.el.classList.add('returned');
+        await moveDroneTo(u, 8+rand(-2,2), 64+rand(-2,2), 900);
+      }
+    }
+    if(t.hp<=0){ t.destroyed=true; renderTargets(); updateHpBars(); log(`补击成功：目标「${t.type}」被摧毁`,'ok'); }
+    await sleep(420);
+  }
+  G.reserve = Math.max(0, G.reserve - ui);
+  $('dronesLayer').querySelectorAll('.drone').forEach(d=>d.classList.remove('striking'));
+  renderTargets(); updateHpBars();
+  renderCompareTable();
+  renderFinalReport(is3?3:2);
+  const aliveAfter = G.targets.filter(t=>t.visible && !t.blind && !t.destroyed);
+  if(!is3 && aliveAfter.length>0 && G.reserve>0){
+    G.step='retryStrike3';
+    setBtn('继续三次补击', true);
+    showSubBtn('弹药耗尽 · 直接结束');
+    setPhaseStatus('阶段四 · 二次补击完成', '二次补击完成，仍存在存活目标且备用充足，可继续三次补击或弹药耗尽直接结束。');
+    toast('⚠ 仍有存活目标，可继续三次补击或直接结束');
+    log(`二次补击后仍有 ${aliveAfter.length} 个目标存活，备用 ${G.reserve} 架，可继续三次补击或弹药耗尽直接结束`, 'warn');
+  } else {
+    finishStrike(!is3 && aliveAfter.length>0 ? '弹药耗尽' : '', is3?'三次补击完成':'二次补击完成');
+  }
+}
+function rollGrade(strikeCount, rate){
+  // 按打击轮次的评级分布：首轮 85%C+15%B；二次 60%B+20%A+5%S（余15%C）；三次 55%S+40%A+5%B
+  const tables = {
+    1: [['C',.85],['B',.15]],
+    2: [['C',.15],['B',.60],['A',.20],['S',.05]],
+    3: [['B',.05],['A',.40],['S',.55]]
+  };
+  const tbl = tables[strikeCount] || tables[3];
+  let r = Math.random(), grade = tbl[tbl.length-1][0];
+  for(const pair of tbl){ if(r < pair[1]){ grade = pair[0]; break; } r -= pair[1]; }
+  // 摧毁率兜底修正：低摧毁率不支持高评级，避免评分脱离战场表现
+  if(rate<0.5 && (grade==='S'||grade==='A')) grade = 'B';
+  if(rate<0.3 && grade==='B') grade = 'C';
+  return grade;
+}
+function renderCompareTable(){
+  let rows='';
+  G.targets.forEach(t=>{
+    const stateBefore = (t.blind&&!t.exposed)?'盲区未暴露':(t.destroyed?'已摧毁':'存活');
+    const stateAfter = t.destroyed?'<span class="tag destroy">已摧毁</span>':(t.blind&&!t.exposed?'<span class="tag blind">盲区未确认</span>':'<span class="tag alive">存活</span>');
+    rows += `<tr><td>${t.type}</td><td><span class="tag ${t.threat==='高'?'high':t.threat==='中'?'mid':'low'}">${t.threat}</span></td><td>${stateBefore}</td><td>${stateAfter}</td><td>${t.hits>0?t.hits+' 次命中':(t.destroyed?'—':'未打击')}</td></tr>`;
+  });
+  const exposed = G.targets.filter(t=>t.exposed).length;
+  setPanel('毁伤对比 · 打击前 vs 打击后', `
+    <table class="tbl"><tr><th>目标</th><th>威胁</th><th>打击前</th><th>打击后</th><th>命中记录</th></tr>${rows}</table>
+    <div style="margin-top:6px;font-size:11px;color:var(--text-dim)">${exposed>0?`二次扫描新暴露盲区目标 ${exposed} 个。`:''}卫星确认毁伤状态，评估杀伤链闭环。</div>`);
+}
+function renderFinalReport(strikeCount){
+  const visAll = G.targets.filter(t=>t.visible && !t.blind);
+  const destroyed = G.targets.filter(t=>t.destroyed).length;
+  const strikeable = visAll.length;
+  const hits = G.targets.reduce((s,t)=>s+t.hits,0);
+  const lossRate = G.assignedTotal>0 ? G.interferedCount/G.assignedTotal : 0;
+  const rate = strikeable>0 ? destroyed/strikeable : 0;
+  const grade = rollGrade(strikeCount, rate, lossRate);
+  let tip, color;
+  if(grade==='S'){ tip='完美打击：高摧毁率 + 低战损，杀伤链全流程高效闭环。'; color='score-grade-S'; }
+  else if(grade==='A'){ tip='优秀：目标体系基本瘫痪，存在少量残余。'; color='score-grade-A'; }
+  else if(grade==='B'){ tip='达标：核心目标已摧毁，但存在明显残余目标。'; color='score-grade-B'; }
+  else { tip='不及预期：需复盘电子对抗强度与弹药分配策略。'; color='score-grade-C'; }
+  G.grade = grade;
+  const unitWord = G.strikeKind==='missile' ? '导弹' : G.strikeKind==='ew' ? '干扰机+编队' : uavTypeName(G.uavType);
+  const lossCost = fleetCost(G.fleet);
+  const returned = G.fleet.filter(f=>f.returned).length;
+  setPanel('战损报告与打击评分', `
+    <div class="report-card">
+      <div class="report-row"><span class="k">出动单元</span><span class="v">${G.assignedTotal} 个${unitWord}</span></div>
+      <div class="report-row"><span class="k">干扰/拦截损失</span><span class="v" style="color:${G.interferedCount?'var(--red)':'var(--green)'}">${G.interferedCount} 个</span></div>
+      ${returned?`<div class="report-row"><span class="k">返航回收</span><span class="v" style="color:var(--green)">${returned} 个</span></div>`:''}
+      <div class="report-row"><span class="k">命中数</span><span class="v">${hits} 次</span></div>
+      <div class="report-row"><span class="k">摧毁目标数</span><span class="v">${destroyed} / ${strikeable}</span></div>
+      <div class="report-row"><span class="k">目标摧毁率</span><span class="v">${Math.round(rate*100)}%</span></div>
+      <div class="report-row"><span class="k">破坏价值</span><span class="v" style="color:#ffd166">${fmtMoney(G.targets.filter(t=>t.destroyed).reduce((s,t)=>s+t.value,0))}</span></div>
+      <div class="report-row"><span class="k">弹药/单元损耗价值</span><span class="v" style="color:#ff8a8a">${fmtMoney(lossCost)}</span></div>
+    </div>
+    <div class="score-big ${color}">${grade}</div>
+    <div class="score-tip">${tip}</div>
+    <div style="margin-top:6px;font-size:11px;color:var(--text-dim)">${strikeCount===1?'（第 1 轮打击后评估 · 等待补击决策……）':strikeCount===2?'（二次补击后评估）':'（三次补击后最终评估）'}</div>`);
+}
+
+/* ================= 最终战果弹窗（三角洲撤离动画风格） ================= */
+function showFinalReport(){
+  const dmg = G.targets.filter(t=>t.destroyed).reduce((s,t)=>s+t.value,0);
+  const cost = fleetCost(G.fleet);
+  $('finDamage').textContent = fmtMoney(dmg);
+  $('finCost').textContent = fmtMoney(cost);
+  renderFinalFleet();
+  $('finalMask').classList.add('show');
+  log(`最终战果：破坏价值 ${fmtMoney(dmg)}，单元损耗 ${fmtMoney(cost)}（出动 ${G.fleet.length} 个）`, 'ok');
+}
+function closeFinal(){ $('finalMask').classList.remove('show'); }
+function renderFinalFleet(){
+  const wrap = $('finFleet'); wrap.innerHTML='';
+  const typeWord = f => f.type==='msl'?'导弹':f.type==='ew'?'干扰机':f.type==='dc'?'诱饵':f.type==='mc'?'改装机':f.type==='rc'?'察打一体':'巡飞弹';
+  const groups = [[1,'首轮突击编队','#00d4ff'],[2,'二次补击编队','#ff8a3d'],[3,'三次补击编队','#b26bff']];
+  groups.forEach(([r,label,color])=>{
+    const items = G.fleet.filter(f=>f.round===r);
+    if(!items.length) return;
+    const g = document.createElement('div');
+    g.className='fleet-group';
+    g.innerHTML = `<div class="fg-label" style="color:${color}">${label}（${items.length} 个）</div>`;
+    const box = document.createElement('div'); box.className='fleet-grid';
+    items.forEach(f=>{
+      const it = document.createElement('div');
+      it.className='fleet-item'+(f.lost?' lost':'');
+      it.innerHTML = `<span class="fi-ico" style="--fc:${color}"></span><span class="fi-name">${f.name}<em class="fi-type">${typeWord(f)}</em></span>${f.lost?'<span class="fi-st lost">失联</span>':(f.returned?'<span class="fi-st ret">返航</span>':'<span class="fi-st">战损</span>')}`;
+      box.appendChild(it);
+    });
+    g.appendChild(box); wrap.appendChild(g);
+  });
+}
+
+/* ================= 补击决策（继续补击 / 弹药耗尽直接结束） ================= */
+function hideSubBtn(){ const b=$('subBtn'); if(b) b.style.display='none'; }
+function showSubBtn(text){ const b=$('subBtn'); b.textContent=text; b.style.display='block'; b.disabled=false; }
+function finishStrike(reason, title){
+  hideSubBtn();
+  G.step='again';
+  if(reason==='弹药耗尽'){
+    setPanel('任务数据', $('dataBody').innerHTML + '<div style="margin-top:8px;font-size:11px;color:var(--red)">※ 备用弹药已耗尽，无法继续补击，打击结束</div>');
+    log('备用弹药耗尽，无法继续补击，打击结束','danger');
+    setPhaseStatus('阶段四 · 弹药耗尽', '备用弹药耗尽，无法继续补击。最终毁伤评估与评分已输出。');
+  } else if(reason==='结束'){
+    setPanel('任务数据', $('dataBody').innerHTML + '<div style="margin-top:8px;font-size:11px;color:var(--orange)">※ 指挥官宣布弹药耗尽，终止后续补击，直接结算战果</div>');
+    log('指挥官决定弹药耗尽，终止补击，直接结算战果','warn');
+    setPhaseStatus('阶段四 · 弹药耗尽', '指挥官宣布弹药耗尽，终止补击。最终毁伤评估与评分已输出。');
+  }
+  if(title && reason!=='弹药耗尽' && reason!=='结束'){
+    setPhaseStatus('阶段四 · '+title, (title==='三次补击完成'?'三次补击完成，最终毁伤评估与评分已更新。':'补击波次完成，毁伤评估已更新。'));
+    toast(title+'，最终评分已更新');
+  }
+  setBtn('再来一次');
+  showFinalReport();
+}
+$('subBtn').addEventListener('click', ()=>{ finishStrike('结束', ''); });
+
+/* ================= 重置 ================= */
+function resetGame(){
+  closeFinal();
+  hideSubBtn();
+  G = { phase:0, step:'start', targets:[], drones:[], reserve:0, assignedTotal:0, interferedCount:0, scanPass:1, fleet:[], uavType:$('cfgUAVType')?$('cfgUAVType').value:'lm', strikeKind:$('cfgStrikeKind')?$('cfgStrikeKind').value:'uav' };
+  clearLayers();
+  $('aiNode').style.display='none';
+  $('satellite').style.left='12%'; $('satellite').style.top='5%';
+  $('scanline').style.top='0%';
+  genTargets();
+  setPhaseUI(0);
+  document.querySelectorAll('.phase-item').forEach(el=>el.classList.remove('active','done'));
+  document.querySelector('.phase-item[data-p="1"]').classList.add('active');
+  setPhaseStatus('系统待命', '点击底部按钮，启动「星眸蜂刃」空天无人打击杀伤链演示。');
+  setPanel('任务数据', '<div style="color:var(--text-dim);font-size:12px;">系统就绪，等待卫星侦察指令。</div>');
+  $('logBox').innerHTML = '[系统] 星眸蜂刃模拟系统已启动，等待指令。<br/>';
+  log('新战局已生成，目标群重新部署','');
+  setBtn('开始卫星侦察');
+}
+function setPhaseStatus(title, desc){
+  $('phaseStatus').innerHTML = title.replace(/^(.+?)(——)?/, '<em>$1</em>');
+  $('phaseDesc').textContent = desc;
+}
+function openAlgo(){ $('algoModal').classList.add('show'); }
+function closeAlgo(){ $('algoModal').classList.remove('show'); }
+
+/* ================= 主按钮 ================= */
+$('mainBtn').addEventListener('click', async ()=>{
+  try{
+    if(G.step==='start') await phase1Scan();
+    else if(G.step==='to2') await phase2Assign();
+    else if(G.step==='to3') await phase3Strike();
+    else if(G.step==='to4') await phase4Assess();
+    else if(G.step==='retryStrike') await doRetryStrike(2);
+    else if(G.step==='retryStrike3') await doRetryStrike(3);
+    else if(G.step==='again') resetGame();
+  }catch(e){ console.error(e); log('系统异常：'+e.message,'danger'); setBtn('重试'); }
+});
+
+/* ================= 打击规模设置 ================= */
+$('cfgReset').addEventListener('click', ()=>{
+  $('cfgHigh').value=6; $('cfgMid').value=4; $('cfgLow').value=2;
+  $('cfgRetry2').value=1.5; $('cfgRetry3').value=2;
+  updateEstCost();
+  toast('打击规模已恢复默认：高6 / 中4 / 低2，二次×1.5，三次×2');
+});
+// 调整飞机数量时实时刷新预计使用价值
+['cfgHigh','cfgMid','cfgLow'].forEach(id=>$(id).addEventListener('input', updateEstCost));
+// 蜂群类型/打击手段变更时实时同步全局，避免"再来一次"后仍沿用旧配置
+$('cfgUAVType').addEventListener('change', ()=>{ G.uavType = $('cfgUAVType').value; updateEstCost(); });
+$('cfgStrikeKind').addEventListener('change', ()=>{ G.strikeKind = $('cfgStrikeKind').value; updateEstCost(); });
+
+/* ================= 初始化 ================= */
+genTargets();
+setBtn('开始卫星侦察');
+</script>
+</body>
+</html>
